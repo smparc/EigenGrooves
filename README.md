@@ -1,4 +1,4 @@
-# Music Recommendation System — SVD & Dimensionality Reduction
+# EigenGrooves — SVD & Dimensionality Reduction
 
 > Discover music beyond genre labels — powered by latent feature analysis using Singular Value Decomposition.
 

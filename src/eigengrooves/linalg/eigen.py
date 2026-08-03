@@ -95,7 +95,9 @@ def jacobi_eigh(
         return np.zeros(n), V
 
     for _ in range(max_sweeps):
-        off = np.sqrt(np.sum(A**2) - np.sum(np.diag(A) ** 2))
+        # Clamp at zero: once the off-diagonal mass reaches rounding level this
+        # difference of near-equal sums can go slightly negative.
+        off = np.sqrt(max(np.sum(A**2) - np.sum(np.diag(A) ** 2), 0.0))
         if off <= tol * frob:
             break
 

@@ -169,10 +169,16 @@ def test_no_dedup_flag_reproduces_the_v1_behaviour(capsys, tmp_path):
     from eigengrooves import make_synthetic_frame
 
     path = tmp_path / "songs.csv"
-    make_synthetic_frame(n_songs=200, n_artists=20, duplicate_rate=0.6,
-                         random_state=1).to_csv(path, index=False)
+    frame = make_synthetic_frame(n_songs=200, n_artists=20, duplicate_rate=0.6,
+                                 random_state=1)
+    frame.to_csv(path, index=False)
+    seed = frame["track_name"].iloc[0]
 
-    code, out = run(capsys, ["recommend", "--data", str(path), "-n", "10", "--no-dedup"])
+    code, out = run(
+        capsys,
+        ["recommend", "--data", str(path), "-n", "10", "--no-dedup",
+         "--playlist", seed],
+    )
     assert code == 0
     assert "Deduplication disabled" in out
 

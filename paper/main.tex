@@ -650,10 +650,10 @@ that sum scales with $\lVert A \rVert$. On a large matrix the tolerance becomes
 unreachable and the solver silently exhausts its iteration budget every time.
 Both of our eigensolvers scale their tolerance by the Frobenius norm.
 
-\paragraph{Sign conventions must be pinned.} As noted in Section~5, an
-unconstrained SVD produces components whose sign is an artefact of the
-arithmetic, which makes any prose interpretation of a loading unreliable across
-runs.
+\paragraph{Sign conventions must be pinned.} As noted in
+Section~\ref{sec:latent}, an unconstrained SVD produces components whose sign
+is an artefact of the arithmetic, which makes any prose interpretation of a
+loading unreliable across runs.
 
 \paragraph{Terminal output must survive the local encoding.} Catalogue metadata
 is full of accented and non-Latin track titles, and a console using a legacy

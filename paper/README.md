@@ -1,6 +1,6 @@
 # Paper
 
-Revised write-up of the project: **[`paper.pdf`](paper.pdf)** (14 pages).
+The write-up for this project: **[`paper.pdf`](paper.pdf)**.
 
 `build/` holds LaTeX intermediates and is gitignored; `paper.pdf` is the
 published copy and is committed.
@@ -38,24 +38,10 @@ build.py              regenerate figures, compile twice, publish paper.pdf
 make_figures.py       all figures, the results table, and values.tex
 build/                LaTeX intermediates (gitignored)
 figures/
-├── cover_genres.png        carried over from the original paper
-├── dataset_table.png       carried over from the original paper
-├── orig_projection_3d.png  the original Figure 2, kept for reference
-├── fig_*.png               regenerated from the current model
+├── cover_genres.png        title-page image
+├── dataset_table.png       Figure 1, illustrating the source data format
+├── fig_*.png               generated from the current model
 ├── table_evaluation.tex    generated
 ├── values.tex              generated macros for every quoted number
 └── results.json            the same numbers, machine-readable
 ```
-
-## Relationship to the original
-
-The original (March 2025) is preserved in intent and structure — same research
-question, same cover image and dataset figure, same original-vs-latent-space
-visualisation. What changed:
-
-- The central claim is now tested rather than asserted, with baselines and
-  paired significance tests. The result is negative.
-- Section 8 answers the research question the original abstract posed but never
-  measured.
-- Section 9 documents four defects in the original pipeline, one of which is
-  visible in the original paper's own published results.

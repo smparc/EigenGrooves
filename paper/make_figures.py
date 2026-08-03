@@ -196,11 +196,10 @@ def figure_loadings(model) -> None:
 
 
 def figure_projection(catalog, scaled, model, seeds) -> None:
-    """The paper's original Figure 2, regenerated: original vs latent space.
+    """Original feature space against latent space.
 
-    Same concept as the version in the first paper -- a seed playlist
-    highlighted against the catalogue, before and after projection -- with the
-    overlapping caption box removed and the panels given equal weight.
+    A seed playlist highlighted against the catalogue, shown before and after
+    projection, so the concentrating effect of the reduction is visible.
     """
     latent = model.transform(catalog.features)
     fig = plt.figure(figsize=(7.4, 3.4))

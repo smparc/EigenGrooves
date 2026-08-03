@@ -188,6 +188,8 @@ def test_catalog_accepts_column_aliases():
 
 def test_catalog_drops_rows_with_unparseable_features():
     frame = make_synthetic_frame(n_songs=50, n_artists=10, duplicate_rate=0, random_state=2)
+    # Cast first: pandas refuses to store a string in a float column in place.
+    frame["energy"] = frame["energy"].astype(object)
     frame.loc[0, "energy"] = "not a number"
     catalog = Catalog.from_frame(frame)
     assert len(catalog) == 49
@@ -309,7 +311,12 @@ def test_whitening_equalises_latent_axes(small_catalog):
 
     plain_spread = plain_variance.max() / plain_variance.min()
     whitened_spread = whitened_variance.max() / whitened_variance.min()
-    assert whitened_spread < plain_spread / 10
+
+    # Whitening divides each axis by its singular value, so the retained axes
+    # end up with essentially identical variance.
+    assert whitened_spread == pytest.approx(1.0, abs=1e-6)
+    assert plain_spread > 2.0
+    assert whitened_spread < plain_spread
 
 
 def test_inverse_transform_recovers_full_rank_input(small_catalog):

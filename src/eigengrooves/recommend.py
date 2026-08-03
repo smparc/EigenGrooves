@@ -93,6 +93,9 @@ class RecommendationResult:
     def __iter__(self):
         return iter(self.items)
 
+    def __getitem__(self, index):
+        return self.items[index]
+
     def as_dict(self) -> dict:
         return {
             "strategy": self.strategy,

@@ -70,8 +70,17 @@ def _svd_via_eigh(
     *demonstrate* the accuracy gap rather than assert it. Not the default:
     forming ``A^T A`` squares the condition number, so components below
     ``sqrt(eps) * sigma_max`` come back as noise.
+
+    Decomposes whichever Gram matrix is smaller. For a wide matrix, ``A^T A``
+    is the large one and is rank-deficient by construction, so its null space
+    is pure rounding noise; ``A A^T`` is both cheaper and better conditioned.
     """
     m, n = A.shape
+    # Work with the smaller Gram matrix, then map back.
+    if m < n:
+        U, sigma, Vt = _svd_via_eigh(A.T, k, eigen_method)
+        return Vt.T, sigma, U.T
+
     AtA = A.T @ A
     eigenvalues, V = symmetric_eigh(AtA, method=eigen_method)
 

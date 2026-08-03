@@ -238,7 +238,16 @@ def test_jacobi_preserves_small_singular_values(rng):
     assert relative_eigh > relative_jacobi * 100
 
 
-def test_jacobi_reconstruction_beats_eigh_on_ill_conditioning(rng):
+def test_reconstruction_error_hides_the_accuracy_gap(rng):
+    """Both backends reconstruct well; only one gets the small values right.
+
+    Worth pinning down, because reconstruction error is the obvious metric to
+    reach for and it is *not* sensitive to the failure this project cares
+    about. Frobenius error is dominated by the largest singular values, so a
+    backend can mangle every small component and still reconstruct to 1e-16.
+    Relative accuracy per singular value is the metric that discriminates --
+    see ``test_jacobi_preserves_small_singular_values``.
+    """
     A = ill_conditioned(rng)
     scale = np.linalg.norm(A)
 
@@ -247,7 +256,7 @@ def test_jacobi_reconstruction_beats_eigh_on_ill_conditioning(rng):
         return float(np.linalg.norm(A - U @ np.diag(sigma) @ Vt) / scale)
 
     assert relative_error("jacobi") < 1e-13
-    assert relative_error("jacobi") <= relative_error("eigh")
+    assert relative_error("eigh") < 1e-13
 
 
 def test_truncation_clamps_to_available_rank(rng):

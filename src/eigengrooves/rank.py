@@ -113,7 +113,12 @@ def rank_by_elbow(sigma: np.ndarray) -> int:
     # Perpendicular distance to the chord from (0, 1) to (1, 0), i.e. the line
     # x + y - 1 = 0.
     distance = np.abs(xn + yn - 1.0) / np.sqrt(2.0)
-    return int(np.argmax(distance) + 1)
+
+    # The argmax is the corner itself -- the first component sitting on the
+    # flat tail. Signal is everything *before* it, so the index doubles as the
+    # count. For [100, 90, 80, 4, 3.5, ...] the corner is index 3 and the
+    # answer is 3, not 4. Never return 0: one component is the floor.
+    return int(max(np.argmax(distance), 1))
 
 
 def _median_marcenko_pastur(beta: float) -> float:

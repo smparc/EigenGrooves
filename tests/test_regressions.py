@@ -87,17 +87,33 @@ def test_every_user_facing_string_survives_a_legacy_code_page(monkeypatch):
 def test_cli_runs_under_a_legacy_code_page():
     """End-to-end: the entry point must survive a cp1252 stdout.
 
-    This is the exact configuration that made ``python main.py`` unrunnable.
+    This is the configuration that makes an unguarded ``print`` of a non-ASCII
+    glyph fatal.
+
+    The child inherits the real environment with only ``PYTHONIOENCODING``
+    overridden. Passing a minimal ``env`` dict instead replaces the whole
+    environment, and on Windows an empty ``SystemRoot`` stops the interpreter
+    from seeding hash randomisation -- the process then dies during startup,
+    before reaching any of our code, and the test reports a failure that has
+    nothing to do with encoding.
     """
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
     result = subprocess.run(
         [sys.executable, "-m", "eigengrooves.cli", "recommend",
          "--synthetic", "--synthetic-songs", "300", "-n", "3"],
         capture_output=True,
-        env={"PYTHONIOENCODING": "cp1252", "PATH": "", "SYSTEMROOT": ""},
+        env=env,
         timeout=300,
     )
-    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
-    assert b"UnicodeEncodeError" not in result.stderr
+    stderr = result.stderr.decode("utf-8", "replace")
+    stdout = result.stdout.decode("utf-8", "replace")
+
+    assert result.returncode == 0, stderr
+    assert "UnicodeEncodeError" not in stderr
+    # Assert it actually did the work. Without this, a run that exits 0 after
+    # printing nothing would pass and the regression would go unnoticed.
+    assert "recommendations" in stdout
+    assert stdout.count("\n") > 10
 
 
 # ---------------------------------------------------------------------------

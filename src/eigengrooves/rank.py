@@ -118,7 +118,7 @@ def rank_by_elbow(sigma: np.ndarray) -> int:
     # flat tail. Signal is everything *before* it, so the index doubles as the
     # count. For [100, 90, 80, 4, 3.5, ...] the corner is index 3 and the
     # answer is 3, not 4. Never return 0: one component is the floor.
-    return int(max(np.argmax(distance), 1))
+    return max(int(np.argmax(distance)), 1)
 
 
 def _median_marcenko_pastur(beta: float) -> float:

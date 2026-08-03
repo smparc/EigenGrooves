@@ -522,7 +522,21 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--min-group-size", type=int, default=6)
     ev.add_argument("--max-groups", type=int, default=400)
     ev.add_argument("--at-k", type=int, default=10)
+    ev.add_argument("--test-metric", default="ndcg",
+                    choices=("ndcg", "recall", "mrr", "hit_rate", "precision"),
+                    help="metric used for the paired significance test")
     ev.set_defaults(func=cmd_evaluate)
+
+    cl = subparsers.add_parser(
+        "cluster",
+        help="cluster the latent space and compare it to a genre taxonomy",
+    )
+    _add_common_arguments(cl)
+    cl.add_argument("--clusters", type=int, default=None,
+                    help="number of clusters (default: number of reference classes)")
+    cl.add_argument("--label-column", default="genre",
+                    help="column holding the reference taxonomy")
+    cl.set_defaults(func=cmd_cluster)
 
     fetch = subparsers.add_parser("fetch-data", help="install a catalogue CSV")
     fetch.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)

@@ -52,7 +52,23 @@ where = ["src"]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = ["slow: long-running tests, deselect with -m 'not slow'"]
-filterwarnings = ["error::RuntimeWarning"]
+filterwarnings = [
+    # Promote RuntimeWarnings to errors: in numerical code they almost always
+    # mean an overflow, a divide-by-zero or a NaN we should have handled.
+    "error::RuntimeWarning",
+    # ...with one exception we do not control. Some BLAS backends (notably
+    # Apple's Accelerate, used by default on macOS) leave the floating-point
+    # "invalid" status flag set after a matmul even when every element of the
+    # result is finite. NumPy reports that flag, so `A.T @ A` on a small matrix
+    # can warn despite being numerically perfect.
+    #
+    # This is safe to ignore *here* because it cannot hide a real NaN: the
+    # assertions that would be affected compare against an expected value, and
+    # `np.allclose` returns False for NaN. `test_factors_are_finite` also
+    # checks finiteness explicitly across every shape and backend, so a genuine
+    # NaN fails loudly rather than silently.
+    "ignore:invalid value encountered in matmul:RuntimeWarning",
+]
 
 [tool.ruff]
 line-length = 100

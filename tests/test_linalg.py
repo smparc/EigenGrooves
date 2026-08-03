@@ -43,6 +43,7 @@ def test_householder_qr_reconstructs(rng, shape):
 def test_householder_q_is_orthonormal(rng, shape):
     A = rng.normal(size=shape)
     Q, _ = householder_qr(A)
+    assert np.all(np.isfinite(Q))
     assert np.allclose(Q.T @ Q, np.eye(Q.shape[1]), atol=1e-10)
 
 

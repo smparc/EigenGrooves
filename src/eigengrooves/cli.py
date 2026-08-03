@@ -177,10 +177,21 @@ def cmd_recommend(args: argparse.Namespace) -> int:
 
     if not seeds:
         message = "No playlist tracks matched the catalogue."
+        # Showing what *is* in the catalogue turns a dead end into a next step;
+        # the usual cause is running the default playlist against a dataset
+        # that simply does not contain those songs.
+        examples = [catalog.describe(i) for i in range(min(5, len(catalog)))]
         if args.json:
-            print(json.dumps({"error": message, "unresolved": unresolved}, indent=2))
+            print(json.dumps(
+                {"error": message, "unresolved": unresolved, "examples": examples},
+                indent=2,
+            ))
         else:
-            console.print(f"\n{message} Try --synthetic, or check the titles.")
+            console.print(f"\n{message}")
+            console.print("\n  Tracks that are in this catalogue:")
+            for example in examples:
+                console.print(f"    - {example}")
+            console.print("\n  Pass one with --playlist, or use --synthetic.")
         return 1
 
     negatives: list[int] = []

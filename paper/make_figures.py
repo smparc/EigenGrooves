@@ -293,11 +293,20 @@ def figure_evaluation(results, tests) -> dict:
     fig.tight_layout()
     _save(fig, "fig_evaluation.png")
 
-    best = max((r for r in results if r.name.startswith("svd")),
-               key=lambda r: r.metrics["ndcg"])
     raw = next(r for r in results if r.name == "raw_cosine")
+
+    # svd_k9 keeps every component, so its projection is a pure rotation and it
+    # is provably identical to raw cosine. Report it separately as a
+    # correctness check; "best" must mean the best *reduction*.
+    full_rank = next((r for r in results if r.name == "svd_k9"), None)
+    reduced = [
+        r for r in results
+        if r.name.startswith("svd") and r.name != "svd_k9"
+    ]
+    best = max(reduced, key=lambda r: r.metrics["ndcg"])
     best_test = next(t for t in tests if t.name_a == best.name)
-    return {
+
+    values = {
         "bestSvd": best.name.replace("_", r"\_"),
         "bestSvdNdcg": f"{best.metrics['ndcg']:.4f}",
         "rawNdcg": f"{raw.metrics['ndcg']:.4f}",
@@ -310,6 +319,11 @@ def figure_evaluation(results, tests) -> dict:
         "bestSvdCoverage": f"{best.metrics['coverage']:.4f}",
         "rawCoverage": f"{raw.metrics['coverage']:.4f}",
     }
+    if full_rank is not None:
+        gap = abs(full_rank.metrics["ndcg"] - raw.metrics["ndcg"])
+        values["fullRankNdcg"] = f"{full_rank.metrics['ndcg']:.4f}"
+        values["fullRankGap"] = f"{gap:.2e}".replace("e-", "e{-}") if gap else "0"
+    return values
 
 
 def figure_confusion(catalog, model) -> dict:

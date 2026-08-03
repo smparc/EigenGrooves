@@ -1,5 +1,14 @@
+# Runtime dependencies are declared in pyproject.toml; this file exists for
+# anyone who prefers `pip install -r requirements.txt`.
+#
+# Preferred:
+#     pip install -e .            # runtime only
+#     pip install -e ".[dev]"     # + pytest, ruff, mypy
+#     pip install -e ".[notebook]"
+
 numpy>=1.24
 pandas>=2.0
+
+# Only needed for notebooks/analysis.ipynb
 matplotlib>=3.7
-seaborn>=0.12
 jupyter>=1.0

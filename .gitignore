@@ -5,14 +5,37 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
-dist/
-build/
+# Anchored to the repo root: an unanchored `build/` also matches paper/build/,
+# and git cannot re-include a file inside an excluded directory.
+/dist/
+/build/
 .DS_Store
 
-# Data (download separately — see data/README.md)
-data/*.csv
-data/*.json
+# Data (not redistributable — see data/README.md)
+data/*
+!data/README.md
+
+# Fitted models
+*.npz
+
+# Test and tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
 notebooks/.ipynb_checkpoints/
+
+# LaTeX scratch. The finished PDF is published to paper/paper.pdf, which is
+# committed -- simpler and more robust than trying to re-include one file from
+# inside an ignored build directory.
+paper/build/
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz

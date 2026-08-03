@@ -106,15 +106,29 @@ def test_cli_runs_under_a_legacy_code_page():
         env=env,
         timeout=300,
     )
-    stderr = result.stderr.decode("utf-8", "replace")
-    stdout = result.stdout.decode("utf-8", "replace")
+    stderr = result.stderr.decode("cp1252", "replace")
+    stdout = result.stdout.decode("cp1252", "replace")
 
     assert result.returncode == 0, stderr
     assert "UnicodeEncodeError" not in stderr
-    # Assert it actually did the work. Without this, a run that exits 0 after
-    # printing nothing would pass and the regression would go unnoticed.
+
+    # It must actually have done the work. Without this, a run that exits 0
+    # after printing nothing would pass and the regression would go unnoticed.
     assert "recommendations" in stdout
     assert stdout.count("\n") > 10
+
+    # The checks above pass even when glyph selection is broken, because
+    # Console sanitises anything the stream cannot encode -- the process
+    # survives, but every affected character becomes "?". Surviving is not the
+    # bar: the output has to be *correct* on a legacy code page. So assert the
+    # ASCII substitutes were chosen up front rather than patched up on the way
+    # out.
+    assert "  + " in stdout, "the ASCII check-mark fallback was not used"
+    assert "✓" not in stdout, "a raw Unicode glyph reached a cp1252 stream"
+    assert "?" not in stdout, (
+        "output contains a replacement character, so a glyph had to be "
+        "substituted during encoding rather than chosen correctly"
+    )
 
 
 # ---------------------------------------------------------------------------

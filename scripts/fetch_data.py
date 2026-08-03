@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 """
-Download the reference Spotify dataset into ``data/``.
+Install a song-catalogue CSV into ``data/``.
 
-    python scripts/fetch_data.py
-    python scripts/fetch_data.py --force
-    python scripts/fetch_data.py --out /tmp/songs.csv
+    python scripts/fetch_data.py                      # explains the options
+    python scripts/fetch_data.py --url https://.../songs.csv
+    python scripts/fetch_data.py --url ... --force
 
-The dataset is optional: every entry point accepts ``--synthetic`` and will run
-against a generated catalogue instead.
+There is no default download URL, because the dataset this project references
+is not published as a file -- the upstream repository ships a notebook that
+builds one from the Spotify API. Run with no arguments for the full
+explanation, or skip the dataset entirely:
+
+    eigengrooves recommend --synthetic
 """
 
 from __future__ import annotations
@@ -20,18 +24,20 @@ _SRC = Path(__file__).resolve().parent.parent / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from eigengrooves.datasets import DATASET_URL, fetch  # noqa: E402
+from eigengrooves.datasets import fetch  # noqa: E402
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--out",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "data" / "spotify_songs.csv",
         help="destination path",
     )
-    parser.add_argument("--url", default=DATASET_URL, help="source URL")
+    parser.add_argument("--url", default=None, help="direct link to a catalogue CSV")
     parser.add_argument("--force", action="store_true", help="re-download if present")
     args = parser.parse_args()
     return fetch(args.out, url=args.url, force=args.force)

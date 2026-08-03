@@ -338,7 +338,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 def cmd_fetch_data(args: argparse.Namespace) -> int:
     from .datasets import fetch
 
-    return fetch(args.data, force=args.force)
+    return fetch(args.data, url=args.url, force=args.force)
 
 
 # ---------------------------------------------------------------------------
@@ -389,8 +389,9 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--at-k", type=int, default=10)
     ev.set_defaults(func=cmd_evaluate)
 
-    fetch = subparsers.add_parser("fetch-data", help="download the reference dataset")
+    fetch = subparsers.add_parser("fetch-data", help="install a catalogue CSV")
     fetch.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
+    fetch.add_argument("--url", default=None, help="direct link to a catalogue CSV")
     fetch.add_argument("--force", action="store_true", help="re-download even if present")
     fetch.set_defaults(func=cmd_fetch_data)
 

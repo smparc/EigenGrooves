@@ -82,11 +82,17 @@ def main() -> int:
             print(f"  {line}")
 
     pdf = BUILD / "main.pdf"
-    if pdf.exists():
-        print(f"\nBuilt {pdf}  ({pdf.stat().st_size / 1e6:.1f} MB)")
-        return 0
-    print("no PDF produced", file=sys.stderr)
-    return 1
+    if not pdf.exists():
+        print("no PDF produced", file=sys.stderr)
+        return 1
+
+    # Publish out of the (gitignored) scratch directory to a stable path, so
+    # the finished paper is committed and easy to find.
+    published = PAPER / "paper.pdf"
+    shutil.copyfile(pdf, published)
+    print(f"\nBuilt {published}  ({published.stat().st_size / 1e6:.1f} MB)")
+    print(f"  intermediates in {BUILD}")
+    return 0
 
 
 if __name__ == "__main__":

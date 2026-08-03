@@ -5,8 +5,10 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
-dist/
-build/
+# Anchored to the repo root: an unanchored `build/` also matches paper/build/,
+# and git cannot re-include a file inside an excluded directory.
+/dist/
+/build/
 .DS_Store
 
 # Data (not redistributable — see data/README.md)
@@ -28,9 +30,10 @@ htmlcov/
 .ipynb_checkpoints/
 notebooks/.ipynb_checkpoints/
 
-# LaTeX build artifacts (the PDF itself is committed)
-paper/build/*
-!paper/build/main.pdf
+# LaTeX scratch. The finished PDF is published to paper/paper.pdf, which is
+# committed -- simpler and more robust than trying to re-include one file from
+# inside an ignored build directory.
+paper/build/
 *.aux
 *.log
 *.out

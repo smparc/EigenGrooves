@@ -23,8 +23,14 @@ import numpy as np
 from . import __version__
 from .baselines import build_standard_rankers
 from .catalog import DEFAULT_FEATURES, Catalog
+from .cluster import compare_to_labels, confusion_table
 from .console import Console, glyph, rule
-from .evaluate import build_groups, compare_rankers, format_comparison
+from .evaluate import (
+    build_groups,
+    compare_rankers,
+    format_comparison,
+    paired_bootstrap_test,
+)
 from .model import fit_latent_model
 from .normalization import fit_scaler
 from .recommend import AGGREGATIONS, STRATEGIES, Recommender
@@ -321,6 +327,19 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
     results = compare_rankers(rankers, groups, catalog, scaled, k=args.at_k)
 
+    # The headline comparison: does any latent model actually beat the no-SVD
+    # control? A difference in means is not an answer -- the queries are shared,
+    # so the test must be paired.
+    baseline = next((r for r in results if r.name == "raw_cosine"), None)
+    tests = []
+    if baseline is not None:
+        tests = [
+            paired_bootstrap_test(r, baseline, metric=args.test_metric,
+                                  random_state=args.seed)
+            for r in results
+            if r.name != baseline.name
+        ]
+
     if args.json:
         print(json.dumps({
             "protocol": {
@@ -331,18 +350,123 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                 "at_k": args.at_k,
             },
             "systems": [
-                {"name": r.name, "metrics": r.metrics} for r in results
+                {
+                    "name": r.name,
+                    "metrics": r.metrics,
+                    "ci": {
+                        m: list(r.ci(m))
+                        for m in ("ndcg", "recall", "mrr", "hit_rate", "diversity")
+                    },
+                }
+                for r in results
+            ],
+            "paired_tests_vs_raw_cosine": [
+                {
+                    "system": t.name_a,
+                    "metric": t.metric,
+                    "difference": t.difference,
+                    "ci": [t.ci_low, t.ci_high],
+                    "p_value": t.p_value,
+                    "significant": t.significant,
+                }
+                for t in tests
             ],
         }, indent=2))
         return 0
 
     console.header(f"Evaluation - {len(groups)} queries, grouped by {args.group_by}")
     console.print(format_comparison(results, k=args.at_k))
+
+    if tests:
+        console.section(f"Paired bootstrap vs. raw_cosine ({args.test_metric})")
+        console.print(
+            f"  {'system':<16} {'difference':>11}  {'95% CI':>22}  {'p':>7}   verdict"
+        )
+        for t in tests:
+            verdict = "significant" if t.significant else "n.s."
+            console.print(
+                f"  {t.name_a:<16} {t.difference:>+11.4f}  "
+                f"[{t.ci_low:>+9.4f}, {t.ci_high:>+9.4f}]  {t.p_value:>7.3f}   {verdict}"
+            )
+
     console.print("")
     console.print(f"  {rule(58)}")
     console.print("  Higher is better for every column. `random` is the floor;")
     console.print("  `raw_cosine` is the no-SVD control that the latent models")
     console.print("  must beat to justify the decomposition at all.")
+    console.print("  'n.s.' means the 95% interval for the paired difference")
+    console.print("  includes zero - the systems are not distinguishable here.")
+    return 0
+
+
+def cmd_cluster(args: argparse.Namespace) -> int:
+    """Answer the project's original question: does the latent space rebuild genre?"""
+    console = Console(quiet=args.json)
+    catalog = _load_catalog(args, console)
+
+    if args.label_column not in catalog.frame.columns:
+        message = (
+            f"catalog has no '{args.label_column}' column, so there is nothing to "
+            "compare the clustering against. Use --synthetic, or supply a CSV "
+            "with a genre column."
+        )
+        if args.json:
+            print(json.dumps({"error": message}, indent=2))
+        else:
+            console.print(f"\nerror: {message}\n")
+        return 2
+
+    model = _fit(args, catalog)
+    latent = model.transform(catalog.features)
+    labels = catalog.frame[args.label_column].astype(str).tolist()
+
+    result, agreement = compare_to_labels(
+        latent, labels, k=args.clusters, random_state=args.seed
+    )
+
+    if args.json:
+        table, cluster_keys, class_keys = confusion_table(result.labels, labels)
+        print(json.dumps({
+            "k_latent": model.k,
+            "n_clusters": agreement.k,
+            "n_reference_classes": agreement.n_reference_classes,
+            "adjusted_rand_index": agreement.adjusted_rand_index,
+            "normalized_mutual_information": agreement.normalized_mutual_information,
+            "purity": agreement.purity,
+            "silhouette": agreement.silhouette,
+            "verdict": agreement.verdict(),
+            "confusion": {
+                "clusters": [int(c) for c in cluster_keys],
+                "classes": [str(c) for c in class_keys],
+                "counts": table.tolist(),
+            },
+        }, indent=2))
+        return 0
+
+    console.header(f"Latent clustering vs. {args.label_column}")
+    console.print(f"  Latent dimensions      : {model.k}")
+    console.print(f"  Clusters               : {agreement.k}")
+    console.print(f"  Reference classes      : {agreement.n_reference_classes}")
+    console.print("")
+    console.print(f"  Adjusted Rand Index    : {agreement.adjusted_rand_index:.4f}   (0 = chance, 1 = identical)")
+    console.print(f"  Normalised Mutual Info : {agreement.normalized_mutual_information:.4f}")
+    console.print(f"  Purity                 : {agreement.purity:.4f}   (not chance-corrected)")
+    console.print(f"  Silhouette             : {agreement.silhouette:.4f}   (cluster separation)")
+    console.print("")
+    console.print(f"  Verdict: the latent partition {agreement.verdict()}.")
+
+    table, cluster_keys, class_keys = confusion_table(result.labels, labels)
+    console.section("Which clusters map to which classes")
+    width = max((len(str(c)) for c in class_keys), default=8)
+    header = "  cluster  " + "  ".join(str(c).rjust(width) for c in class_keys)
+    console.print(header)
+    for row_index, cluster in enumerate(cluster_keys):
+        counts = "  ".join(str(v).rjust(width) for v in table[row_index])
+        console.print(f"  {str(cluster):>7}  {counts}")
+    console.print("")
+    console.print("  Rows summing across several columns = genres the audio features")
+    console.print("  consider interchangeable. Columns split across rows = genres the")
+    console.print("  features consider internally inconsistent.")
     return 0
 
 

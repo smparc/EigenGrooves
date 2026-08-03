@@ -13,8 +13,16 @@ from eigengrooves import Catalog, Recommender, fit_latent_model, make_synthetic_
 from eigengrooves.normalization import fit_scaler
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def rng() -> np.random.Generator:
+    """A fresh generator per test.
+
+    Deliberately *not* session-scoped. A shared generator makes each test's
+    input depend on how many draws every earlier test happened to consume, so
+    adding a test elsewhere in the suite silently changes the data this one
+    runs on -- which is exactly how a latent numerical fragility surfaces as a
+    mystery failure in an unrelated file.
+    """
     return np.random.default_rng(1234)
 
 

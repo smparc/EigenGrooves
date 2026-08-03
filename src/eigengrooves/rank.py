@@ -121,6 +121,18 @@ def rank_by_elbow(sigma: np.ndarray) -> int:
     return max(int(np.argmax(distance)), 1)
 
 
+def _trapezoid(y: np.ndarray, x: np.ndarray) -> float:
+    """Trapezoidal integration of ``y`` over ``x``.
+
+    Written out rather than delegating to NumPy: ``np.trapezoid`` only exists
+    from NumPy 2.0, and ``np.trapz`` is deprecated in it, so calling either
+    would silently constrain which NumPy versions this package supports. The
+    rule is three lines, and everything else numerical here is from scratch
+    anyway.
+    """
+    return float(np.sum(0.5 * (y[:-1] + y[1:]) * np.diff(x)))
+
+
 def _median_marcenko_pastur(beta: float) -> float:
     """Median of the Marcenko-Pastur distribution with aspect ratio ``beta``.
 
@@ -137,7 +149,7 @@ def _median_marcenko_pastur(beta: float) -> float:
         density = np.sqrt(np.maximum((upper - grid) * (grid - lower), 0.0)) / (
             2.0 * np.pi * beta * grid
         )
-        return float(np.trapezoid(density, grid))
+        return _trapezoid(density, grid)
 
     lo, hi = lower, upper
     for _ in range(100):

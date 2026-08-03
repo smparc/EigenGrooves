@@ -462,7 +462,7 @@ def cmd_cluster(args: argparse.Namespace) -> int:
     console.print(header)
     for row_index, cluster in enumerate(cluster_keys):
         counts = "  ".join(str(v).rjust(width) for v in table[row_index])
-        console.print(f"  {str(cluster):>7}  {counts}")
+        console.print(f"  {cluster!s:>7}  {counts}")
     console.print("")
     console.print("  Rows summing across several columns = genres the audio features")
     console.print("  consider interchangeable. Columns split across rows = genres the")

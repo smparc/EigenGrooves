@@ -152,7 +152,8 @@ def kmeans(
         converged = False
         iteration = 0
 
-        for iteration in range(1, max_iter + 1):
+        while iteration < max_iter:
+            iteration += 1
             labels, inertia = _assign(X, centroids)
 
             for j in range(k):

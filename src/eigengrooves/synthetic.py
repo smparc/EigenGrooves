@@ -83,12 +83,59 @@ _UNIT_INTERVAL = {
     "instrumentalness", "liveness", "valence",
 }
 
-_WORDS_A = ("Silver", "Midnight", "Paper", "Velvet", "Neon", "Golden", "Hollow", "Bitter",
-            "Electric", "Quiet", "Crimson", "Glass", "Wild", "Slow", "Broken", "Feral",
-            "Lunar", "Salt", "Amber", "Static")
-_WORDS_B = ("Hours", "Machine", "Lantern", "Weather", "Cathedral", "Riverbed", "Static",
-            "Signal", "Orchard", "Parade", "Mercy", "Kingdom", "Fever", "Anthem", "Ghost",
-            "Harbour", "Summer", "Distance", "Gravity", "Echo")
+_ADJECTIVES = (
+    "Silver", "Midnight", "Paper", "Velvet", "Neon", "Golden", "Hollow", "Bitter",
+    "Electric", "Quiet", "Crimson", "Glass", "Wild", "Slow", "Broken", "Feral",
+    "Lunar", "Salt", "Amber", "Static", "Marble", "Copper", "Restless", "Distant",
+    "Pale", "Solar", "Iron", "Tender", "Vacant", "Sunken", "Reckless", "Northern",
+)
+_NOUNS = (
+    "Hours", "Machine", "Lantern", "Weather", "Cathedral", "Riverbed", "Signal",
+    "Orchard", "Parade", "Mercy", "Kingdom", "Fever", "Anthem", "Ghost", "Harbour",
+    "Summer", "Distance", "Gravity", "Echo", "Chorus", "Alibi", "Window", "Tide",
+    "Chapel", "Circuit", "Meridian", "Halo", "Vessel", "Threshold", "Lullaby",
+)
+_ARTIST_TEMPLATES = (
+    "{adj} {noun}",
+    "The {noun}",
+    "{adj} {noun} Club",
+    "{noun} & {noun2}",
+    "The {adj} {noun}",
+)
+_TITLE_TEMPLATES = (
+    "{adj} {noun}",
+    "{noun}",
+    "{adj} {noun} (Reprise)",
+    "All the {noun}",
+    "{noun} in {adj} Light",
+    "No {noun}",
+    "{adj} {noun} Blues",
+)
+
+
+def _unique_names(templates, rng, count, used):
+    """Draw ``count`` distinct names from the template space.
+
+    Falls back to a numeric suffix only after the combinatorial space is
+    genuinely exhausted, which keeps names readable at realistic sizes instead
+    of degenerating into 'Bitter Riverbed 1550'.
+    """
+    names = []
+    for _ in range(count):
+        for _attempt in range(64):
+            template = templates[rng.integers(len(templates))]
+            candidate = template.format(
+                adj=_ADJECTIVES[rng.integers(len(_ADJECTIVES))],
+                noun=_NOUNS[rng.integers(len(_NOUNS))],
+                noun2=_NOUNS[rng.integers(len(_NOUNS))],
+            )
+            if candidate not in used:
+                break
+        else:
+            candidate = f"{candidate} {len(used)}"
+        used.add(candidate)
+        names.append(candidate)
+    return names
 
 
 def make_synthetic_frame(
@@ -133,21 +180,14 @@ def make_synthetic_frame(
     # their tracks cluster tighter than the genre as a whole.
     artist_genre = rng.integers(0, len(GENRE_PROFILES), size=n_artists)
     artist_bias = rng.normal(0.0, 0.35, size=(n_artists, len(_FEATURE_ORDER)))
-    artist_names = [f"{_WORDS_A[i % len(_WORDS_A)]} {_WORDS_B[(i * 7 + 3) % len(_WORDS_B)]}"
-                    f"{'' if i < len(_WORDS_A) * len(_WORDS_B) else i}" for i in range(n_artists)]
-    # Guarantee uniqueness even when n_artists exceeds the word-pair space.
-    seen: dict[str, int] = {}
-    for i, name in enumerate(artist_names):
-        if name in seen:
-            seen[name] += 1
-            artist_names[i] = f"{name} {seen[name] + 1}"
-        else:
-            seen[name] = 0
+    used_names: set[str] = set()
+    artist_names = _unique_names(_ARTIST_TEMPLATES, rng, n_artists, used_names)
 
     song_artist = rng.integers(0, n_artists, size=n_songs)
+    used_titles: set[str] = set()
+    titles = _unique_names(_TITLE_TEMPLATES, rng, n_songs, used_titles)
 
     rows = []
-    used_titles: set[str] = set()
     for s in range(n_songs):
         a = int(song_artist[s])
         profile = GENRE_PROFILES[int(artist_genre[a])]
@@ -164,12 +204,7 @@ def make_synthetic_frame(
                 value = float(np.clip(value, 40.0, 220.0))
             record[feature] = value
 
-        title = f"{_WORDS_A[rng.integers(len(_WORDS_A))]} {_WORDS_B[rng.integers(len(_WORDS_B))]}"
-        if title in used_titles:
-            title = f"{title} {s}"
-        used_titles.add(title)
-
-        record["track_name"] = title
+        record["track_name"] = titles[s]
         record["artist_names"] = artist_names[a]
         record["genre"] = profile.name
         # Popularity is long-tailed, as it is in reality.

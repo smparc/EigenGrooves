@@ -104,6 +104,22 @@ def _fit(args: argparse.Namespace, catalog: Catalog):
     )
 
 
+def _demo_playlist(catalog: Catalog, size: int = 4) -> list[str]:
+    """Pick a stylistically coherent seed playlist from a catalogue.
+
+    Takes tracks from the artist with the most entries, so the demo exercises
+    the recommender on a playlist that actually has a direction.
+    """
+    counts: dict[str, list[int]] = {}
+    for index, artist in enumerate(catalog.artists):
+        counts.setdefault(artist, []).append(index)
+    if not counts:
+        return []
+    best = max(counts.values(), key=len)
+    # 'Title - Artist' so the resolver cannot pick a same-titled track elsewhere.
+    return [f"{catalog.titles[i]} - {catalog.artists[i]}" for i in best[:size]]
+
+
 def _print_model_summary(model, console: Console) -> None:
     console.section("Latent space")
     console.print(f"  {model.rank_selection}")
@@ -145,9 +161,10 @@ def cmd_recommend(args: argparse.Namespace) -> int:
 
     playlist = args.playlist
     if args.synthetic and playlist == DEFAULT_PLAYLIST:
-        # The default playlist names real songs that the synthetic catalogue
-        # cannot contain; pick a coherent stand-in so --synthetic just works.
-        playlist = [catalog.titles[i] for i in range(min(4, len(catalog)))]
+        # The default playlist names real songs the synthetic catalogue cannot
+        # contain. Substitute several tracks by one artist, so the demo shows a
+        # *coherent* playlist rather than four unrelated songs.
+        playlist = _demo_playlist(catalog, size=4)
 
     seeds, resolved, unresolved = catalog.resolve_playlist(playlist, fuzzy=not args.exact)
 

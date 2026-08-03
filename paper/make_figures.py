@@ -205,6 +205,12 @@ def figure_projection(catalog, scaled, model, seeds) -> None:
     latent = model.transform(catalog.features)
     fig = plt.figure(figsize=(7.4, 3.4))
 
+    # Thin the background cloud: at 3000 points the overdraw hides the very
+    # structure the figure is meant to show.
+    rng = np.random.default_rng(0)
+    n_background = min(1200, len(catalog))
+    background = rng.choice(len(catalog), size=n_background, replace=False)
+
     for position, (data, labels, title) in enumerate([
         (scaled[:, [0, 1, 3]],
          ("danceability", "energy", "acousticness"),
@@ -214,10 +220,10 @@ def figure_projection(catalog, scaled, model, seeds) -> None:
          "Latent feature space\n(SVD projection)"),
     ]):
         ax = fig.add_subplot(1, 2, position + 1, projection="3d")
-        ax.scatter(data[:, 0], data[:, 1], data[:, 2],
-                   c=GREY, alpha=0.16, s=4, linewidths=0)
+        ax.scatter(data[background, 0], data[background, 1], data[background, 2],
+                   c="#8A8F99", alpha=0.30, s=7, linewidths=0, depthshade=False)
         ax.scatter(data[seeds, 0], data[seeds, 1], data[seeds, 2],
-                   c=CORAL, s=26, edgecolors="white", linewidths=0.4, depthshade=False)
+                   c=CORAL, s=42, edgecolors="white", linewidths=0.6, depthshade=False)
         ax.set_xlabel(labels[0], fontsize=7, labelpad=-4)
         ax.set_ylabel(labels[1], fontsize=7, labelpad=-4)
         ax.set_zlabel(labels[2], fontsize=7, labelpad=-4)

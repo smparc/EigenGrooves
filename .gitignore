@@ -27,3 +27,12 @@ htmlcov/
 # Jupyter checkpoints
 .ipynb_checkpoints/
 notebooks/.ipynb_checkpoints/
+
+# LaTeX build artifacts (the PDF itself is committed)
+paper/build/*
+!paper/build/main.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz

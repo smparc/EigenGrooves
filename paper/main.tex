@@ -358,10 +358,13 @@ Both original strategies are retained, with two additions.
         coverage of the input playlist.
   \item \textbf{Overall top} --- the globally highest-scoring candidates.
   \item \textbf{Centroid} --- query by the playlist's mean latent vector.
-  \item \textbf{Maximal Marginal Relevance} --- greedily select
-        $\arg\max_d\; \lambda \cdot \mathrm{rel}(d) - (1-\lambda)\max_{s \in S}
-        \mathrm{sim}(d,s)$, trading relevance against redundancy with an
-        explicit parameter \cite{carbonell1998}.
+  \item \textbf{Maximal Marginal Relevance} --- greedily select the candidate
+        maximising
+        \[
+          \lambda \cdot \mathrm{rel}(d) \;-\; (1-\lambda)\max_{s \in S}\mathrm{sim}(d,s),
+        \]
+        trading relevance against redundancy with an explicit parameter
+        \cite{carbonell1998}.
 \end{itemize}
 
 MMR deserves comment. The original \emph{overall top} maximised similarity and

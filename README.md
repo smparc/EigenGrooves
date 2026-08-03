@@ -150,29 +150,45 @@ itself.
 ## Does the SVD earn its keep?
 
 The premise is that projecting to a latent subspace beats using the features
-directly. That is a hypothesis, so the harness tests it. Held-out-artist
-protocol, 219 queries on the synthetic catalogue:
+directly. That is a hypothesis, so the harness tests it — with a **paired
+bootstrap**, because all systems see identical queries and a difference in
+means is not by itself evidence. Held-out-artist protocol, 219 queries:
 
 ```
-system         hit_rate@10  recall@10  precision@10  mrr     ndcg@10  diversity  coverage
--------------  -----------  ---------  ------------  ------  -------  ---------  --------
-raw_cosine     0.3242       0.0351     0.0393        0.0865  0.0371   0.2125     0.4698
-svd_k7         0.3059       0.0322     0.0352        0.0793  0.0340   0.2331     0.4875
-svd_k5         0.2283       0.0241     0.0265        0.0508  0.0236   0.2903     0.5052
-svd_k3         0.1370       0.0153     0.0169        0.0412  0.0169   0.3904     0.5128
-svd_k2         0.0959       0.0086     0.0110        0.0338  0.0120   0.4973     0.5189
-random         0.0457       0.0057     0.0046        0.0154  0.0056   1.0046     0.5202
-popularity     0.0411       0.0033     0.0041        0.0088  0.0036   1.0131     0.0037
+system         hit_rate@10  recall@10  mrr     ndcg@10  diversity  coverage   vs raw_cosine
+-------------  -----------  ---------  ------  -------  ---------  --------   ------------------
+raw_cosine     0.3242       0.0351     0.0865  0.0371   0.2125     0.4698     (control)
+svd_k9         0.3242       0.0351     0.0865  0.0371   0.2125     0.4698     Δ=0.0000  identical
+svd_k7         0.3059       0.0322     0.0793  0.0340   0.2331     0.4875     p=0.427   n.s.
+svd_k5_whiten  0.2009       0.0224     0.0559  0.0237   0.3208     0.5032     p=0.004   worse
+svd_k5         0.2283       0.0241     0.0508  0.0236   0.2903     0.5052     p=0.002   worse
+svd_k3         0.1370       0.0153     0.0412  0.0169   0.3904     0.5128     p<0.001   worse
+svd_k2         0.0959       0.0086     0.0338  0.0120   0.4973     0.5189     p<0.001   worse
+random         0.0457       0.0057     0.0154  0.0056   1.0046     0.5202     p<0.001   worse
+popularity     0.0411       0.0033     0.0088  0.0036   1.0131     0.0037     p<0.001   worse
 ```
 
 Reproduce with `eigengrooves evaluate --synthetic`.
 
-**The honest reading.** On this task, dimensionality reduction *costs*
-retrieval accuracy and *buys* diversity and catalogue coverage, and the
-trade-off steepens as $k$ falls. Raw cosine on the nine scaled features beats
-every latent model on NDCG. Every latent model beats random and popularity by
-a wide margin, so the features carry real signal — the open question is only
-whether compressing them helps.
+**The honest reading**, in three parts:
+
+*The pipeline is provably correct.* `svd_k9` reproduces `raw_cosine` to every
+digit on every metric. That is the expected identity: at full rank the
+projection is an orthogonal rotation, and cosine similarity is rotation-
+invariant. Any bug in scaling, decomposition or ranking would break it. It also
+sharpens the question — the SVD can only do something *through truncation*.
+
+*Truncating to k=7 costs nothing measurable.* Δ = −0.0031, 95% CI
+[−0.0105, +0.0048], p = 0.427. The interval contains zero. Meanwhile diversity
+rises 0.2125 → 0.2331 and coverage 0.4698 → 0.4875. Two dimensions are free.
+
+*Below that, reduction is significantly worse.* Every k ≤ 5 comparison is
+significant at p < 0.01, and accuracy falls monotonically with k. The original
+project's hardcoded k=5 sits on the wrong side of that line.
+
+So dimensionality reduction here is a **diversity technique, not an accuracy
+technique**. Every latent model still beats random and popularity by a wide
+margin, so the features carry real signal.
 
 Two caveats that genuinely matter:
 
@@ -186,6 +202,38 @@ Two caveats that genuinely matter:
 Which is the point of shipping the harness: the claim is now falsifiable, and
 changing `k`, the scaling, or the aggregation produces a number rather than an
 opinion.
+
+---
+
+## Does audio-feature classification reproduce genre?
+
+The original research question, finally measured. `eigengrooves cluster
+--synthetic` partitions the latent space with from-scratch k-means and compares
+the partition to genre labels using chance-corrected metrics:
+
+```
+Adjusted Rand Index    : 0.4338   (0 = chance, 1 = identical)
+Normalised Mutual Info : 0.5716
+Silhouette             : 0.1784
+```
+
+Partial agreement — the taxonomy is neither recovered nor unrelated. The
+confusion table is where the finding actually is:
+
+| Genre | Outcome |
+|---|---|
+| hip-hop (88%), live (87%), EDM (78%) | **cleanly separable** — each owns a cluster |
+| ambient + classical | **merged** — split across two clusters that are both mixtures |
+| pop, rock, R&B | **dissolved** — no cluster of their own |
+
+Audio features reorganise music by **production character**, not genre
+ancestry. Where a genre label encodes production (speechiness, audience noise,
+synthetic timbre) it survives; where it encodes history and marketing, it
+dissolves.
+
+Same caveat as above: the specific merges partly reflect the synthetic
+generator's hand-written genre profiles. The method transfers; re-measure on a
+real corpus before relying on the particulars.
 
 ---
 

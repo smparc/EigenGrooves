@@ -1,6 +1,9 @@
 # Paper
 
-Revised write-up of the project: `build/main.pdf`.
+Revised write-up of the project: **[`paper.pdf`](paper.pdf)** (14 pages).
+
+`build/` holds LaTeX intermediates and is gitignored; `paper.pdf` is the
+published copy and is committed.
 
 ## Building
 
@@ -29,9 +32,11 @@ document re-derives.
 ## Files
 
 ```
-main.tex              the paper
-build.py              regenerate figures, then compile twice
+paper.pdf             the built paper (committed)
+main.tex              the source
+build.py              regenerate figures, compile twice, publish paper.pdf
 make_figures.py       all figures, the results table, and values.tex
+build/                LaTeX intermediates (gitignored)
 figures/
 ├── cover_genres.png        carried over from the original paper
 ├── dataset_table.png       carried over from the original paper

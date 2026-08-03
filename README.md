@@ -284,9 +284,24 @@ src/eigengrooves/
 ├── matching.py          # Levenshtein, token-set, title normalisation
 ├── console.py           # encoding-safe output
 └── cli.py               # recommend / analyze / evaluate / fetch-data
-tests/                   # 284 tests, 88% coverage
+tests/                   # 326 tests
 notebooks/analysis.ipynb # visual walkthrough, runs without a dataset
+paper/paper.pdf          # the write-up; rebuild with `python paper/build.py`
 ```
+
+## Paper
+
+[`paper/paper.pdf`](paper/paper.pdf) is the full write-up: method, the
+evaluation and its negative result, the genre-clustering analysis, and a
+section documenting the defects in the original pipeline.
+
+```bash
+python paper/build.py                              # synthetic catalogue
+python paper/build.py --data data/spotify_songs.csv
+```
+
+Every figure, table and quoted number is regenerated from a live run of the
+package, so the paper cannot drift from the code.
 
 ---
 

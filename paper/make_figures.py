@@ -231,7 +231,7 @@ def figure_projection(catalog, scaled, model, seeds) -> None:
         ax.set_title(title, fontsize=9)
 
     handles = [
-        plt.Line2D([], [], marker="o", ls="", color=GREY, label="catalogue"),
+        plt.Line2D([], [], marker="o", ls="", color="#8A8F99", label="catalogue"),
         plt.Line2D([], [], marker="o", ls="", color=CORAL, label="seed playlist"),
     ]
     fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=8,

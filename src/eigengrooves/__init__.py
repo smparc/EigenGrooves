@@ -35,7 +35,25 @@ from .baselines import (
     build_standard_rankers,
 )
 from .catalog import DEFAULT_FEATURES, Catalog, CatalogError
-from .evaluate import build_groups, compare_rankers, evaluate_ranker, format_comparison
+from .cluster import (
+    ClusterResult,
+    GenreAgreement,
+    adjusted_rand_index,
+    compare_to_labels,
+    confusion_table,
+    kmeans,
+    normalized_mutual_information,
+    silhouette_score,
+)
+from .evaluate import (
+    ComparisonTest,
+    bootstrap_ci,
+    build_groups,
+    compare_rankers,
+    evaluate_ranker,
+    format_comparison,
+    paired_bootstrap_test,
+)
 from .explain import Explanation, explain_match
 from .linalg import explained_variance_ratio, svd
 from .model import LatentModel, fit_latent_model
@@ -49,7 +67,10 @@ __all__ = [
     "DEFAULT_FEATURES",
     "Catalog",
     "CatalogError",
+    "ClusterResult",
+    "ComparisonTest",
     "Explanation",
+    "GenreAgreement",
     "LatentModel",
     "LatentRanker",
     "PopularityRanker",

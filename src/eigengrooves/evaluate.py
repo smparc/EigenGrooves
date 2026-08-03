@@ -70,15 +70,151 @@ class EvaluationGroup:
 
 @dataclass
 class SystemScores:
-    """Averaged metrics for one ranking system."""
+    """Averaged metrics for one ranking system, plus the raw per-query values.
+
+    Keeping ``per_query`` is what makes honest comparison possible. Two systems
+    scoring 0.0371 and 0.0340 on 219 queries may or may not actually differ;
+    the mean alone cannot say, and the queries are shared between systems, so
+    the comparison must be *paired*. See :func:`paired_bootstrap_test`.
+    """
 
     name: str
     k: int
     n_queries: int
     metrics: dict[str, float] = field(default_factory=dict)
+    per_query: dict[str, np.ndarray] = field(default_factory=dict, repr=False)
 
     def as_row(self, columns: list[str]) -> list[str]:
         return [self.name] + [f"{self.metrics.get(c, float('nan')):.4f}" for c in columns]
+
+    def ci(self, metric: str, confidence: float = 0.95) -> tuple[float, float]:
+        """Bootstrap confidence interval for one metric's mean."""
+        values = self.per_query.get(metric)
+        if values is None or values.size == 0:
+            return (float("nan"), float("nan"))
+        return bootstrap_ci(values, confidence=confidence)
+
+
+@dataclass(frozen=True)
+class ComparisonTest:
+    """Result of a paired comparison between two systems on one metric."""
+
+    metric: str
+    name_a: str
+    name_b: str
+    mean_a: float
+    mean_b: float
+    difference: float
+    ci_low: float
+    ci_high: float
+    p_value: float
+    n_queries: int
+
+    @property
+    def significant(self) -> bool:
+        """True when the confidence interval for the difference excludes zero."""
+        return not (self.ci_low <= 0.0 <= self.ci_high)
+
+    def summary(self) -> str:
+        verdict = "significant" if self.significant else "NOT significant"
+        direction = ">" if self.difference > 0 else "<"
+        return (
+            f"{self.name_a} ({self.mean_a:.4f}) {direction} {self.name_b} ({self.mean_b:.4f}) "
+            f"on {self.metric}: Δ={self.difference:+.4f} "
+            f"[95% CI {self.ci_low:+.4f}, {self.ci_high:+.4f}], p={self.p_value:.3f} — {verdict}"
+        )
+
+
+def bootstrap_ci(
+    values: np.ndarray,
+    confidence: float = 0.95,
+    n_resamples: int = 10_000,
+    random_state: int | None = 0,
+) -> tuple[float, float]:
+    """Percentile bootstrap confidence interval for the mean.
+
+    Resamples the per-query values with replacement and reads the empirical
+    quantiles. Makes no distributional assumption, which matters here: ranking
+    metrics are bounded, heavily zero-inflated and nothing like Gaussian, so a
+    textbook t-interval would be misleading.
+    """
+    values = np.asarray(values, dtype=float).ravel()
+    if values.size == 0:
+        return (float("nan"), float("nan"))
+    if values.size == 1:
+        return (float(values[0]), float(values[0]))
+
+    rng = np.random.default_rng(random_state)
+    draws = rng.integers(0, values.size, size=(n_resamples, values.size))
+    means = values[draws].mean(axis=1)
+    alpha = (1.0 - confidence) / 2.0
+    return (
+        float(np.quantile(means, alpha)),
+        float(np.quantile(means, 1.0 - alpha)),
+    )
+
+
+def paired_bootstrap_test(
+    a: SystemScores,
+    b: SystemScores,
+    metric: str = "ndcg",
+    confidence: float = 0.95,
+    n_resamples: int = 10_000,
+    random_state: int | None = 0,
+) -> ComparisonTest:
+    """Paired bootstrap test of whether ``a`` beats ``b`` on ``metric``.
+
+    Both systems are evaluated on identical queries, so the per-query
+    differences are paired and the resampling must draw *query indices*, not
+    each system independently. Ignoring the pairing throws away the
+    query-difficulty variance that both systems share and badly overstates the
+    uncertainty.
+
+    The p-value is two-sided, computed as the fraction of resampled mean
+    differences falling on the opposite side of zero from the observed
+    difference (doubled, and floored at 1/n_resamples since a bootstrap cannot
+    resolve p below its own resolution).
+    """
+    values_a = a.per_query.get(metric)
+    values_b = b.per_query.get(metric)
+    if values_a is None or values_b is None:
+        raise ValueError(f"metric {metric!r} not recorded for both systems")
+    if values_a.size != values_b.size:
+        raise ValueError(
+            f"systems were evaluated on different query counts: "
+            f"{values_a.size} vs {values_b.size}"
+        )
+    if values_a.size == 0:
+        raise ValueError("no queries to compare")
+
+    differences = values_a - values_b
+    observed = float(differences.mean())
+
+    rng = np.random.default_rng(random_state)
+    draws = rng.integers(0, differences.size, size=(n_resamples, differences.size))
+    resampled = differences[draws].mean(axis=1)
+
+    alpha = (1.0 - confidence) / 2.0
+    ci_low = float(np.quantile(resampled, alpha))
+    ci_high = float(np.quantile(resampled, 1.0 - alpha))
+
+    # Centre the resamples on zero to approximate the null distribution.
+    centred = resampled - observed
+    tail = float(np.mean(np.abs(centred) >= abs(observed)))
+    p_value = max(tail, 1.0 / n_resamples)
+
+    return ComparisonTest(
+        metric=metric,
+        name_a=a.name,
+        name_b=b.name,
+        mean_a=float(values_a.mean()),
+        mean_b=float(values_b.mean()),
+        difference=observed,
+        ci_low=ci_low,
+        ci_high=ci_high,
+        p_value=min(p_value, 1.0),
+        n_queries=int(differences.size),
+    )
 
 
 def build_groups(
@@ -200,11 +336,18 @@ def evaluate_ranker(
             shannon_entropy([catalog.artists[int(i)] for i in ranked])
         )
 
-    metrics = {name: float(np.mean(values)) for name, values in accumulators.items()}
+    per_query = {name: np.asarray(values, dtype=float) for name, values in accumulators.items()}
+    metrics = {name: float(values.mean()) for name, values in per_query.items()}
+    # Coverage is a property of the whole run, not of any single query, so it
+    # has no per-query counterpart and cannot be bootstrapped this way.
     metrics["coverage"] = catalog_coverage(all_ranked, len(catalog))
 
     return SystemScores(
-        name=ranker.name, k=k, n_queries=len(groups), metrics=metrics
+        name=ranker.name,
+        k=k,
+        n_queries=len(groups),
+        metrics=metrics,
+        per_query=per_query,
     )
 
 

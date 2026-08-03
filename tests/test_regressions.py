@@ -52,6 +52,38 @@ def test_console_survives_unencodable_song_titles():
     buffer.flush()  # must not raise
 
 
+def test_every_user_facing_string_survives_a_legacy_code_page(monkeypatch):
+    """No library string may carry a glyph cp1252 cannot encode.
+
+    Found the hard way: ``ComparisonTest.summary()`` shipped a bare Greek
+    delta and crashed the figure-generation script on exactly the console this
+    project already had a fix for. Anything that can reach a terminal has to go
+    through ``glyph``.
+    """
+    monkeypatch.setenv("EIGENGROOVES_ASCII", "1")
+    supports_unicode.cache_clear()
+    try:
+        from eigengrooves.evaluate import ComparisonTest
+
+        test = ComparisonTest(
+            metric="ndcg", name_a="svd_k7", name_b="raw_cosine",
+            mean_a=0.034, mean_b=0.037, difference=-0.003,
+            ci_low=-0.010, ci_high=0.005, p_value=0.427, n_queries=219,
+        )
+        test.summary().encode("cp1252")  # must not raise
+
+        catalog = Catalog.from_frame(_chart_style_frame(n_unique=40))
+        model = fit_latent_model(catalog.features, catalog.feature_names, k=3)
+        str(model.rank_selection).encode("cp1252")
+        model.describe_component(1).encode("cp1252")
+
+        recommender = Recommender(model, catalog)
+        for item in recommender.recommend([0, 1], n=3, explain=True):
+            item.explanation.summary().encode("cp1252")
+    finally:
+        supports_unicode.cache_clear()
+
+
 def test_cli_runs_under_a_legacy_code_page():
     """End-to-end: the entry point must survive a cp1252 stdout.
 

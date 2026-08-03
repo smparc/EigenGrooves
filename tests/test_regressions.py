@@ -21,7 +21,6 @@ from eigengrooves import Catalog, Recommender, fit_latent_model
 from eigengrooves.console import Console, glyph, supports_unicode
 from eigengrooves.linalg import explained_variance_ratio, svd
 
-
 # ---------------------------------------------------------------------------
 # 1. Windows console crash
 # ---------------------------------------------------------------------------

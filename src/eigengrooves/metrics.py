@@ -16,15 +16,15 @@ from __future__ import annotations
 import numpy as np
 
 __all__ = [
+    "average_precision_at_k",
+    "catalog_coverage",
     "hit_rate_at_k",
+    "intra_list_diversity",
+    "ndcg_at_k",
+    "novelty",
     "precision_at_k",
     "recall_at_k",
     "reciprocal_rank",
-    "ndcg_at_k",
-    "average_precision_at_k",
-    "intra_list_diversity",
-    "catalog_coverage",
-    "novelty",
     "shannon_entropy",
 ]
 

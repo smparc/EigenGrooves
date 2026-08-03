@@ -18,7 +18,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-__all__ = ["levenshtein", "similarity_ratio", "token_set_ratio", "normalize_title", "Match", "best_matches"]
+__all__ = ["Match", "best_matches", "levenshtein", "normalize_title", "similarity_ratio", "token_set_ratio"]
 
 # Strip the noise that streaming catalogues attach to titles.
 _PAREN = re.compile(r"[\(\[].*?[\)\]]")

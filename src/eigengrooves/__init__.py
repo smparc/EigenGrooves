@@ -46,9 +46,9 @@ from .similarity import cosine_similarity, cosine_similarity_matrix, query_simil
 from .synthetic import make_synthetic_catalog, make_synthetic_frame
 
 __all__ = [
+    "DEFAULT_FEATURES",
     "Catalog",
     "CatalogError",
-    "DEFAULT_FEATURES",
     "Explanation",
     "LatentModel",
     "LatentRanker",

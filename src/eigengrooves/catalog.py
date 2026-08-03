@@ -33,7 +33,7 @@ import pandas as pd
 
 from .matching import Match, best_matches, normalize_title
 
-__all__ = ["Catalog", "DEFAULT_FEATURES", "CatalogError"]
+__all__ = ["DEFAULT_FEATURES", "Catalog", "CatalogError"]
 
 DEFAULT_FEATURES: tuple[str, ...] = (
     "danceability",
@@ -115,7 +115,7 @@ class Catalog:
         df: pd.DataFrame,
         feature_names: tuple[str, ...] = DEFAULT_FEATURES,
         deduplicate: bool = True,
-    ) -> "Catalog":
+    ) -> Catalog:
         """Build a catalogue from an in-memory frame."""
         df = df.copy()
         df.columns = (
@@ -172,7 +172,7 @@ class Catalog:
         path: str | os.PathLike,
         feature_names: tuple[str, ...] = DEFAULT_FEATURES,
         deduplicate: bool = True,
-    ) -> "Catalog":
+    ) -> Catalog:
         """Load a catalogue from CSV."""
         path = Path(path)
         if not path.exists():

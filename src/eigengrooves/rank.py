@@ -36,12 +36,12 @@ from dataclasses import dataclass
 import numpy as np
 
 __all__ = [
+    "STRATEGIES",
     "RankSelection",
-    "select_rank",
-    "rank_by_variance",
     "rank_by_elbow",
     "rank_by_gavish_donoho",
-    "STRATEGIES",
+    "rank_by_variance",
+    "select_rank",
 ]
 
 STRATEGIES = ("variance", "elbow", "gavish_donoho")

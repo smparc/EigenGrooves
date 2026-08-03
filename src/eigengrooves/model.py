@@ -147,7 +147,7 @@ class LatentModel:
         parts = [f"{'+' if w >= 0 else '-'}{abs(w):.2f} {name}" for name, w in pairs]
         return " ".join(parts)
 
-    def with_whiten(self, whiten: bool) -> "LatentModel":
+    def with_whiten(self, whiten: bool) -> LatentModel:
         """A copy with whitening toggled -- no refit needed."""
         return replace(self, whiten=whiten)
 
@@ -182,7 +182,7 @@ class LatentModel:
         )
 
     @classmethod
-    def load(cls, path: str | Path) -> "LatentModel":
+    def load(cls, path: str | Path) -> LatentModel:
         """Load a model saved by :meth:`save`."""
         with np.load(Path(path), allow_pickle=True) as data:
             version = int(data["format_version"])

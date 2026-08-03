@@ -42,11 +42,11 @@ from .model import LatentModel
 from .similarity import normalize_rows, top_k_indices
 
 __all__ = [
-    "Ranker",
-    "RandomRanker",
-    "PopularityRanker",
-    "RawFeatureRanker",
     "LatentRanker",
+    "PopularityRanker",
+    "RandomRanker",
+    "Ranker",
+    "RawFeatureRanker",
     "build_standard_rankers",
 ]
 

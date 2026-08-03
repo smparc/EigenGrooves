@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import os
 import sys
-from functools import lru_cache
+from functools import cache
 
-__all__ = ["glyph", "supports_unicode", "rule", "Console"]
+__all__ = ["Console", "glyph", "rule", "supports_unicode"]
 
 # Preferred glyph -> ASCII fallback.
 _FALLBACKS = {
@@ -44,7 +44,7 @@ _FALLBACKS = {
 }
 
 
-@lru_cache(maxsize=None)
+@cache
 def supports_unicode(encoding: str | None = None) -> bool:
     """Can the active output encoding represent our preferred glyphs?
 

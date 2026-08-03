@@ -41,11 +41,11 @@ from .model import LatentModel
 from .similarity import normalize_rows, top_k_indices
 
 __all__ = [
+    "AGGREGATIONS",
+    "STRATEGIES",
     "Recommendation",
     "RecommendationResult",
     "Recommender",
-    "STRATEGIES",
-    "AGGREGATIONS",
 ]
 
 STRATEGIES = ("overall_top", "one_per_song", "mmr", "centroid")
@@ -359,7 +359,7 @@ class Recommender:
         # Cycle through seeds so that with n > len(seeds) every seed gets a
         # second pick before any seed gets a third.
         seed_order = [seeds[i % len(seeds)] for i in range(max(n, len(seeds)))]
-        for position, seed in enumerate(seed_order):
+        for seed in seed_order:
             if len(items) >= n:
                 break
             row = per_seed[seeds.index(seed)]

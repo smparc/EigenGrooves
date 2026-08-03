@@ -26,7 +26,7 @@ import pandas as pd
 
 from .catalog import Catalog
 
-__all__ = ["GenreProfile", "GENRE_PROFILES", "make_synthetic_frame", "make_synthetic_catalog"]
+__all__ = ["GENRE_PROFILES", "GenreProfile", "make_synthetic_catalog", "make_synthetic_frame"]
 
 
 @dataclass(frozen=True)

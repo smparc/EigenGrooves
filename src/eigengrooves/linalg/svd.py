@@ -35,7 +35,7 @@ from .eigen import symmetric_eigh
 from .jacobi_svd import jacobi_svd
 from .randomized import randomized_svd
 
-__all__ = ["svd", "canonicalize_signs", "explained_variance_ratio", "BACKENDS"]
+__all__ = ["BACKENDS", "canonicalize_signs", "explained_variance_ratio", "svd"]
 
 BACKENDS = ("jacobi", "eigh", "randomized")
 

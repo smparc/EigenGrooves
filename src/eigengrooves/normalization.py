@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-__all__ = ["Scaler", "fit_scaler", "METHODS"]
+__all__ = ["METHODS", "Scaler", "fit_scaler"]
 
 METHODS = ("zscore", "robust", "none")
 

@@ -22,7 +22,6 @@ from eigengrooves.rank import (
     select_rank,
 )
 
-
 # ---------------------------------------------------------------------------
 # Scaling
 # ---------------------------------------------------------------------------
@@ -50,7 +49,7 @@ def test_scaler_applies_training_statistics_to_new_points(rng):
 
 def test_constant_feature_does_not_divide_by_zero():
     X = np.column_stack([np.ones(50), np.arange(50.0)])
-    scaled, scaler = fit_scaler(X)
+    scaled, _ = fit_scaler(X)
     assert np.all(np.isfinite(scaled))
     assert np.allclose(scaled[:, 0], 0.0)
 

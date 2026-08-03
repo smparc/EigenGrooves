@@ -64,13 +64,17 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "RUF"]
 ignore = [
     "E501",    # line length is handled by the formatter
     "B905",    # zip(strict=) is 3.10+, kept optional for readability
+    # This project deliberately handles ambiguous Unicode (the check mark,
+    # sigma and minus sign that crashed v1 on a cp1252 console). Flagging them
+    # as "did you mean ASCII?" is exactly backwards here.
+    "RUF001", "RUF002", "RUF003",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B011"]
+"notebooks/*" = ["E402", "E702", "F401", "I001"]
 
 [tool.mypy]
-python_version = "3.10"
 files = ["src/eigengrooves"]
 ignore_missing_imports = true
 warn_unused_ignores = true

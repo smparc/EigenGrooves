@@ -17,9 +17,9 @@ from __future__ import annotations
 import numpy as np
 
 __all__ = [
-    "normalize_rows",
     "cosine_similarity",
     "cosine_similarity_matrix",
+    "normalize_rows",
     "query_similarities",
     "top_k_indices",
 ]

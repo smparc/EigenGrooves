@@ -268,7 +268,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     peak = spectrum[0] if spectrum.size else 1.0
     cumulative = np.cumsum(spectrum**2) / np.sum(spectrum**2)
     for i, value in enumerate(spectrum, start=1):
-        bar = glyph("█") * max(int(round(40 * value / peak)), 1)
+        bar = glyph("█") * max(round(40 * value / peak), 1)
         marker = " <- selected k" if i == model.k else ""
         console.print(f"  {i:>2}  {value:8.3f}  {bar:<41} {cumulative[i - 1] * 100:5.1f}%{marker}")
 

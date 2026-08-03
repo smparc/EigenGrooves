@@ -9,9 +9,20 @@ dist/
 build/
 .DS_Store
 
-# Data (download separately — see data/README.md)
-data/*.csv
-data/*.json
+# Data (not redistributable — see data/README.md)
+data/*
+!data/README.md
+
+# Fitted models
+*.npz
+
+# Test and tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Jupyter checkpoints
 .ipynb_checkpoints/

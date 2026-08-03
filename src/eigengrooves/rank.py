@@ -121,35 +121,53 @@ def rank_by_elbow(sigma: np.ndarray) -> int:
     return max(int(np.argmax(distance)), 1)
 
 
-def _trapezoid(y: np.ndarray, x: np.ndarray) -> float:
-    """Trapezoidal integration of ``y`` over ``x``.
+def _integrate_midpoint(f, a: float, b: float, n_intervals: int = 4096) -> float:
+    """Integrate ``f`` over ``[a, b]`` by the midpoint rule.
 
     Written out rather than delegating to NumPy: ``np.trapezoid`` only exists
-    from NumPy 2.0, and ``np.trapz`` is deprecated in it, so calling either
-    would silently constrain which NumPy versions this package supports. The
-    rule is three lines, and everything else numerical here is from scratch
-    anyway.
+    from NumPy 2.0 and ``np.trapz`` is deprecated in it, so calling either
+    would silently constrain which NumPy versions this package supports.
+
+    The midpoint rule is chosen over the trapezoidal rule for a specific
+    reason: it never evaluates the integrand at the interval endpoints. The
+    Marcenko-Pastur density below has an integrable singularity at its lower
+    edge when ``beta = 1``, and sampling that endpoint yields 0/0 = NaN, which
+    then propagates through the whole integral.
     """
-    return float(np.sum(0.5 * (y[:-1] + y[1:]) * np.diff(x)))
+    if b <= a:
+        return 0.0
+    edges = np.linspace(a, b, n_intervals + 1)
+    midpoints = 0.5 * (edges[:-1] + edges[1:])
+    return float(np.sum(f(midpoints) * np.diff(edges)))
 
 
 def _median_marcenko_pastur(beta: float) -> float:
     """Median of the Marcenko-Pastur distribution with aspect ratio ``beta``.
 
     Found by bisection on the CDF, integrated numerically. Used to convert the
-    observed median singular value into an estimate of the noise level.
+    observed median singular value into an estimate of the noise level when it
+    is not supplied.
     """
     lower = (1.0 - np.sqrt(beta)) ** 2
     upper = (1.0 + np.sqrt(beta)) ** 2
 
-    def cdf(x: float) -> float:
-        grid = np.linspace(lower, min(x, upper), 4096)
-        if grid.size < 2 or x <= lower:
-            return 0.0
-        density = np.sqrt(np.maximum((upper - grid) * (grid - lower), 0.0)) / (
-            2.0 * np.pi * beta * grid
+    # Integrate under the substitution x = t^2, so that
+    #     \int f(x) dx = \int f(t^2) 2t dt.
+    # When beta = 1 the lower edge sits at x = 0 and the density diverges like
+    # x^{-1/2}; the substitution cancels that exactly, turning an integrable
+    # singularity into a bounded integrand. For beta < 1 the change is
+    # harmless. Without it the beta = 1 quadrature loses ~0.6% of the
+    # probability mass and the estimated median is off by ~1%.
+    def transformed_density(t: np.ndarray) -> np.ndarray:
+        x = t * t
+        return np.sqrt(np.maximum((upper - x) * (x - lower), 0.0)) / (
+            np.pi * beta * t
         )
-        return _trapezoid(density, grid)
+
+    def cdf(x: float) -> float:
+        return _integrate_midpoint(
+            transformed_density, np.sqrt(lower), np.sqrt(min(x, upper))
+        )
 
     lo, hi = lower, upper
     for _ in range(100):

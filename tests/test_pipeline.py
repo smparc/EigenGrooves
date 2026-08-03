@@ -105,6 +105,66 @@ def test_gavish_donoho_recovers_a_planted_rank(rng):
     assert rank_by_gavish_donoho(sigma, m, n) == true_rank
 
 
+def test_marcenko_pastur_median_matches_the_published_constant():
+    """Validate the noise estimator against a number from the literature.
+
+    Gavish & Donoho give omega(1) ~ 2.858 for a square matrix, where
+    omega = lambda(beta) / sqrt(mu(beta)) and mu is the Marcenko-Pastur median
+    we compute numerically. Reproducing it end to end checks both the median
+    and the lambda expression.
+    """
+    from eigengrooves.rank import _median_marcenko_pastur
+
+    lam = np.sqrt(2 * (1 + 1) + 8 * 1 / ((1 + 1) + np.sqrt(1 + 14 + 1)))
+    assert lam == pytest.approx(2.3094, abs=1e-3)
+
+    mu = _median_marcenko_pastur(1.0)
+    assert mu == pytest.approx(0.6529, abs=1e-3)
+    assert lam / np.sqrt(mu) == pytest.approx(2.858, abs=2e-3)
+
+
+@pytest.mark.parametrize("beta", [1.0, 0.5, 0.1, 0.01, 0.003])
+def test_marcenko_pastur_density_integrates_to_one(beta):
+    """The density must be a probability distribution for every aspect ratio.
+
+    Regression test: at beta = 1 the lower edge sits at x = 0 and the density
+    diverges like x^{-1/2}. Sampling that endpoint gives 0/0 = NaN, which used
+    to propagate through the integral and collapse the bisection to zero --
+    silently producing a wrong rank rather than an error.
+    """
+    from eigengrooves.rank import _integrate_midpoint
+
+    lower = (1.0 - np.sqrt(beta)) ** 2
+    upper = (1.0 + np.sqrt(beta)) ** 2
+
+    def transformed(t):
+        x = t * t
+        return np.sqrt(np.maximum((upper - x) * (x - lower), 0.0)) / (np.pi * beta * t)
+
+    mass = _integrate_midpoint(transformed, np.sqrt(lower), np.sqrt(upper))
+    assert mass == pytest.approx(1.0, abs=1e-4)
+
+
+@pytest.mark.parametrize("beta", [1.0, 0.5, 0.1, 0.01])
+def test_marcenko_pastur_median_is_finite_and_in_support(beta):
+    from eigengrooves.rank import _median_marcenko_pastur
+
+    mu = _median_marcenko_pastur(beta)
+    assert np.isfinite(mu)
+    assert (1.0 - np.sqrt(beta)) ** 2 <= mu <= (1.0 + np.sqrt(beta)) ** 2
+    assert mu > 0.0
+
+
+def test_gavish_donoho_works_on_a_square_matrix(rng):
+    """beta = 1 is the case the singularity used to break."""
+    n, true_rank = 200, 4
+    signal = rng.normal(size=(n, true_rank)) @ rng.normal(size=(true_rank, n)) * 9.0
+    sigma = np.linalg.svd(signal + rng.normal(size=(n, n)), compute_uv=False)
+
+    k = rank_by_gavish_donoho(sigma, n, n)
+    assert k == true_rank
+
+
 def test_gavish_donoho_with_known_noise(rng):
     m, n, true_rank = 500, 20, 4
     signal = rng.normal(size=(m, true_rank)) @ rng.normal(size=(true_rank, n)) * 8.0

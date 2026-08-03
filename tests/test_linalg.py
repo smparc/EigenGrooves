@@ -182,10 +182,28 @@ def test_svd_matches_numpy_singular_values(rng, backend, shape):
 
 
 @pytest.mark.parametrize("shape", SHAPES)
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_factors_are_finite(rng, backend, shape):
+    """No NaN or inf in any factor, for any shape or backend.
+
+    Kept as a standalone check because the suite ignores the spurious
+    "invalid value encountered in matmul" warning that some BLAS backends emit
+    on small matrices (see ``filterwarnings`` in pyproject.toml). That warning
+    is not our NaN detector -- this test is.
+    """
+    A = rng.normal(size=shape)
+    U, sigma, Vt = svd(A, backend=backend)
+    assert np.all(np.isfinite(U))
+    assert np.all(np.isfinite(sigma))
+    assert np.all(np.isfinite(Vt))
+
+
+@pytest.mark.parametrize("shape", SHAPES)
 def test_jacobi_factors_are_orthonormal(rng, shape):
     A = rng.normal(size=shape)
     U, sigma, Vt = svd(A, backend="jacobi")
     r = len(sigma)
+    assert np.all(np.isfinite(U)) and np.all(np.isfinite(Vt))
     assert np.allclose(U.T @ U, np.eye(r), atol=1e-10)
     assert np.allclose(Vt @ Vt.T, np.eye(r), atol=1e-10)
 
@@ -207,6 +225,7 @@ def test_eigh_factors_are_orthonormal_within_its_weaker_guarantee(rng, shape):
     A = rng.normal(size=shape)
     U, sigma, Vt = svd(A, backend="eigh")
     r = len(sigma)
+    assert np.all(np.isfinite(U)) and np.all(np.isfinite(Vt))
     assert np.allclose(U.T @ U, np.eye(r), atol=1e-3)
     # V comes straight from a symmetric eigensolver, so it stays accurate.
     assert np.allclose(Vt @ Vt.T, np.eye(r), atol=1e-10)

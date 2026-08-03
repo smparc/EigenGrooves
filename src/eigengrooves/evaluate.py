@@ -34,6 +34,7 @@ import numpy as np
 
 from .baselines import Ranker
 from .catalog import Catalog
+from .console import glyph
 from .metrics import (
     catalog_coverage,
     hit_rate_at_k,
@@ -116,12 +117,16 @@ class ComparisonTest:
         return not (self.ci_low <= 0.0 <= self.ci_high)
 
     def summary(self) -> str:
+        # Routed through `glyph` for the same reason everything else is: this
+        # string reaches a terminal, and a bare Greek delta kills the process
+        # on a cp1252 console.
         verdict = "significant" if self.significant else "NOT significant"
         direction = ">" if self.difference > 0 else "<"
         return (
             f"{self.name_a} ({self.mean_a:.4f}) {direction} {self.name_b} ({self.mean_b:.4f}) "
-            f"on {self.metric}: Δ={self.difference:+.4f} "
-            f"[95% CI {self.ci_low:+.4f}, {self.ci_high:+.4f}], p={self.p_value:.3f} — {verdict}"
+            f"on {self.metric}: {glyph('Δ')}={self.difference:+.4f} "
+            f"[95% CI {self.ci_low:+.4f}, {self.ci_high:+.4f}], "
+            f"p={self.p_value:.3f} - {verdict}"
         )
 
 

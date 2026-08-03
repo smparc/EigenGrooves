@@ -41,6 +41,7 @@ _FALLBACKS = {
     "█": "#",  # full block
     "░": ".",  # light shade
     "…": "...",
+    "Δ": "delta",
 }
 
 

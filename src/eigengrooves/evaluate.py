@@ -46,7 +46,17 @@ from .metrics import (
     shannon_entropy,
 )
 
-__all__ = ["EvaluationGroup", "SystemScores", "build_groups", "compare_rankers", "evaluate_ranker"]
+__all__ = [
+    "ComparisonTest",
+    "EvaluationGroup",
+    "SystemScores",
+    "bootstrap_ci",
+    "build_groups",
+    "compare_rankers",
+    "evaluate_ranker",
+    "format_comparison",
+    "paired_bootstrap_test",
+]
 
 
 @dataclass(frozen=True)

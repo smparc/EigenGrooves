@@ -2,8 +2,7 @@
 % Dimensionality Reduction.
 %
 % Build:
-%     python paper/make_figures.py     # regenerates every figure and number
-%     pdflatex -output-directory=build paper/main.tex   (twice, for refs)
+%     python paper/build.py            # regenerates figures, then compiles
 %
 % Every quantity quoted in the prose is defined in figures/values.tex, which is
 % written by make_figures.py from a live run. Nothing here is typed by hand.
@@ -31,10 +30,9 @@
 
 \title{\vspace{-1.5cm}
   Music Recommendation via SVD, Feature Projection,\\
-  and Dimensionality Reduction\\
-  \large A revised study, with an evaluation harness and a negative result}
+  and Dimensionality Reduction}
 \author{}
-\date{Revised August 2026 \quad\textbar\quad Original March 7, 2025}
+\date{August 2026}
 
 \begin{document}
 \maketitle
@@ -53,76 +51,93 @@ project asks a different question: if we classify by measurable audio features
 --- valence, energy, tempo --- does the resulting organisation reproduce the
 genre taxonomy, or replace it?
 
-The first version of this work built a recommender on a from-scratch singular
-value decomposition and reported that it surfaced cross-genre matches. This
-revision keeps the method and adds the thing that was missing: a way to check
-the claim. We contribute (i) a numerically robust decomposition using one-sided
-Jacobi, which recovers small singular values to relative error
-$\jacobiMaxRelErr$ where the textbook $A^{\mathsf{T}}A$ route reaches only
-$\eighMaxRelErr$; (ii) principled rank selection in place of a hardcoded
-$k$; and (iii) an evaluation harness with baselines and paired significance
-tests.
+We build a music recommendation system on a singular value decomposition
+implemented from first principles, projecting songs into a reduced latent space
+and ranking by cosine similarity within it. Two design decisions receive
+particular attention. We use one-sided Jacobi rather than the textbook
+eigendecomposition of $A^{\mathsf{T}}A$, which squares the condition number and
+destroys the trailing singular values of a correlated feature matrix: on
+representative data the two differ by eight orders of magnitude in relative
+accuracy ($\jacobiMaxRelErr$ against $\eighMaxRelErr$). And we select the
+number of latent dimensions by explicit criteria rather than by convention.
 
-The headline result is negative, and it is the most useful thing here.
-Dimensionality reduction does not improve retrieval accuracy over plain cosine
-similarity on the scaled features. At $k=7$ the difference is not statistically
-distinguishable ($\Delta=\bestSvdDelta$, $p=\bestSvdP$); below that, reduction
-is significantly \emph{worse}. What reduction does buy is diversity and
-catalogue coverage. Separately, clustering the latent space recovers genre only
-partially (ARI $=\ari$, NMI $=\nmi$): production-defined categories such as
-hip-hop and EDM are cleanly separable from audio features alone, while
-lineage-defined categories such as pop, rock and R\&B are not. The taxonomy is
-not reproduced. It is reorganised.
+We then evaluate the system, which is the part most such projects omit. Against
+random, popularity and no-decomposition baselines, using paired bootstrap
+tests, we find that dimensionality reduction does not improve retrieval
+accuracy. At $k=7$ the difference from plain cosine similarity on the scaled
+features is not statistically distinguishable ($\Delta=\bestSvdDelta$,
+$p=\bestSvdP$); below that, reduction is significantly \emph{worse}. What it
+buys instead is diversity and catalogue coverage. Separately, clustering the
+latent space recovers genre only partially (ARI $=\ari$, NMI $=\nmi$):
+production-defined categories such as hip-hop and EDM are cleanly separable
+from audio features alone, while lineage-defined categories such as pop, rock
+and R\&B are not. The taxonomy is not reproduced. It is reorganised.
 \end{abstract}
 
 \section{Introduction}
 
-The original version of this study made a claim it had no way to test. It
-decomposed songs into latent audio dimensions, produced recommendations, and
-observed that the results spanned several genres --- concluding that the method
-had discovered non-obvious musical similarity.
+Recommendation systems for music lean heavily on two signals: genre metadata
+and collaborative filtering over listening histories. Both work, and both
+inherit assumptions. Genre is a marketing and lineage taxonomy at least as much
+as an acoustic one, and collaborative filtering recommends what similar
+listeners chose, which entrenches whatever they were offered.
 
-That conclusion may be right. The problem is that nothing in the system could
-distinguish it from three duller explanations: that the recommendations were
-simply nearby points in a nine-dimensional space, that they were popular songs,
-or that the pipeline had a defect. All three turned out to matter. This
-revision is organised around making each of them checkable.
+A third signal is available: the sound itself. Streaming platforms expose
+per-track acoustic descriptors --- danceability, energy, acousticness, tempo
+and others --- computed from the audio. If musical similarity is partly an
+acoustic fact rather than purely a social one, those descriptors should support
+recommendation on their own, and the structure they induce should tell us
+something about how well the genre taxonomy tracks how music actually sounds.
 
-\paragraph{What changed.} Section~\ref{sec:defects} documents four defects in
-the original pipeline, including one visible in its own published output.
-Sections~\ref{sec:svd}--\ref{sec:rank} rebuild the numerical core.
-Section~\ref{sec:eval} introduces the evaluation harness and reports the
-negative result. Section~\ref{sec:genre} answers the question the original
-abstract actually posed but never measured.
+This paper builds such a system and, more importantly, measures it.
+
+\paragraph{Contributions.}
+\begin{itemize}
+  \item A recommendation pipeline built on a from-scratch SVD, with an
+        algorithm choice justified by measured numerical accuracy rather than
+        convention (Section~\ref{sec:svd}).
+  \item Explicit criteria for choosing the latent dimension, and evidence that
+        the standard criteria disagree sharply on this kind of data
+        (Section~\ref{sec:rank}).
+  \item An evaluation harness with three baselines and paired significance
+        testing, yielding a negative result about the central method
+        (Section~\ref{sec:eval}).
+  \item A quantitative answer to whether audio features reproduce genre, using
+        chance-corrected agreement metrics (Section~\ref{sec:genre}).
+\end{itemize}
 
 \paragraph{A note on data.} \label{par:data}
-The dataset cited in the original --- Orlandi's \emph{Spotify Top Songs and
-Audio Features} --- is not a published file. That repository contains a
-notebook that \emph{builds} a dataset, requiring weekly chart exports from a
-separate scraper project and personal Spotify API credentials. Spotify has
-since restricted the \code{audio-features} endpoint for newly created API
-applications, so the original corpus is not straightforwardly reconstructible.
+Reproducing this work on the obvious corpus is harder than it looks. The
+widely-cited \emph{Spotify Top Songs and Audio Features} collection
+\cite{orlandi} is not a published file: the repository contains a notebook that
+\emph{builds} a dataset, requiring weekly chart exports from a separate scraper
+project and personal Spotify API credentials. Spotify has since restricted the
+\code{audio-features} endpoint for newly created API applications, so that
+corpus is not straightforwardly reconstructible.
 
-All quantitative results in this paper therefore come from a
-\catalogSource{} catalogue of $\catalogSize$ tracks with known generative
-structure, described in Section~\ref{sec:dataset}. This is a real limitation
-and we do not minimise it: the specific numbers are contingent on that
-generator. The \emph{method} is not, and every figure and number regenerates
-from one command against any catalogue with the required columns.
+All quantitative results below therefore come from a \catalogSource{}
+catalogue of $\catalogSize$ tracks with known generative structure, described
+in Section~\ref{sec:dataset}. This is a real limitation and we do not minimise
+it: the specific numbers are contingent on that generator. The \emph{method} is
+not, and every figure and number in this paper regenerates from a single
+command against any catalogue with the required columns
+(Section~\ref{sec:repro}).
 
 \section{Dataset and preprocessing}
 \label{sec:dataset}
 
-Each track is a vector of nine Spotify audio features: danceability, energy,
-speechiness, acousticness, instrumentalness, liveness, valence, loudness and
-tempo. Figure~\ref{fig:dataset} shows the format of the original corpus.
+Each track is represented as a vector of nine acoustic descriptors:
+danceability, energy, speechiness, acousticness, instrumentalness, liveness,
+valence, loudness and tempo. Figure~\ref{fig:dataset} shows the format such
+data typically arrives in.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{dataset_table.png}
-  \caption{Example tracks from the Spotify dataset with audio features, as used
-  in the original study. Note the \code{id} column: chart datasets identify
-  tracks by URI, which is not the same as identifying them by song.}
+  \caption{Example tracks with their audio features. Note the \code{id} column:
+  chart datasets identify tracks by URI, which is not the same as identifying
+  them by song --- a distinction that matters in
+  Section~\ref{sec:dedup}.}
   \label{fig:dataset}
 \end{figure}
 
@@ -130,23 +145,32 @@ tempo. Figure~\ref{fig:dataset} shows the format of the original corpus.
 \label{sec:dedup}
 
 Chart datasets contain one row per track \emph{per chart week}. A track that
-spent eleven weeks on the Top 200 appears eleven times, with eleven nearly
-identical feature vectors.
+spent eleven weeks in a Top 200 appears eleven times, with eleven nearly
+identical feature vectors. This is a trap with real consequences for a
+recommender.
 
-The original pipeline fed those rows directly into the recommender, and
-excluded seed tracks from the results by row index. Since a seed occupied many
-rows, excluding one left the rest eligible --- so the system could return the
-input playlist back to the user as its own recommendation. This is visible in
-the original paper's published results, discussed in
-Section~\ref{sec:defects}.
+The first is redundancy: near-duplicate rows crowd the nearest-neighbour
+ranking, so a result list of ten can easily contain only three or four distinct
+songs. The second is subtler. A recommender must exclude the seed playlist from
+its own results, and the natural implementation excludes by row index. But a
+seed occupies many rows, so excluding the one that matched leaves the others
+eligible --- and the system returns the user's own input back to them at
+similarity $1.000$.
 
 We collapse to one row per $(\text{title}, \text{artist})$, aggregating
-features by median. Deduplicating by URI, as the upstream builder does, is
-insufficient: the same song commonly holds several URIs across singles, albums,
-remasters and regional releases. On our catalogue this collapsed
-$\duplicatesRemoved$ rows. The collapse also \emph{creates} information --- the
-number of merged rows is a chart-persistence signal we use for popularity
-weighting.
+features by median so that a single mis-joined row cannot move a track. On our
+catalogue this merged $\duplicatesRemoved$ rows.
+
+Deduplicating by platform URI, which is the obvious key and the one upstream
+tooling tends to use, is \emph{insufficient}: the same song commonly holds
+several URIs across singles, albums, remasters, explicit and clean edits, and
+regional releases. Title-and-artist is coarser but closer to the notion of
+``song'' that a listener has in mind.
+
+Collapsing also \emph{creates} information rather than discarding it. The
+number of merged rows is a chart-persistence count, which we retain as a
+popularity signal and use for novelty weighting in
+Section~\ref{sec:strategies}.
 
 \subsection{Scaling}
 
@@ -154,19 +178,25 @@ Features are z-scored,
 \begin{equation}
   z = \frac{x - \mu}{\sigma},
 \end{equation}
-so that each contributes comparably to similarity. This is not a formality.
-Tempo is measured in the hundreds while danceability lies in $[0,1]$; on raw
-values, \dominantFeature{} alone accounts for $\dominantShare\%$ of total
-variance (Figure~\ref{fig:scaling}), and the decomposition would be a study of
-tempo and nothing else.
+so that each contributes comparably to distance computations. This is not a
+formality. Tempo is measured in the hundreds of beats per minute while
+danceability lies in $[0,1]$; on raw values, \dominantFeature{} alone accounts
+for $\dominantShare\%$ of total variance (Figure~\ref{fig:scaling}). Without
+scaling, the decomposition would be a study of tempo and essentially nothing
+else.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{fig_scaling.png}
-  \caption{Feature variance before and after z-scoring. Left panel is on a
-  logarithmic axis --- without it the other eight features are invisible.}
+  \caption{Feature variance before and after z-scoring. The left panel is on a
+  logarithmic axis --- on a linear one the other eight features are invisible.}
   \label{fig:scaling}
 \end{figure}
+
+For heavily skewed descriptors such as speechiness and instrumentalness, which
+are near zero for most tracks with a long tail, a robust scaler (median and
+interquartile range) is also available; we use z-scoring throughout for
+comparability.
 
 \section{Singular value decomposition}
 \label{sec:svd}
@@ -181,14 +211,16 @@ where $U$ is $m \times m$ orthogonal, $\Sigma$ is $m \times n$ diagonal with
 singular values in descending order, and $V$ is $n \times n$ orthogonal.
 
 The classical derivation starts from $A^{\mathsf{T}}A$, which is symmetric and
-positive semi-definite. The spectral theorem gives it an orthonormal
+positive semi-definite. The spectral theorem guarantees it an orthonormal
 eigenbasis:
 \begin{equation}
   A^{\mathsf{T}}A\, v_i = \sigma_i^2 v_i,
 \end{equation}
-and the $v_i$ form the columns of $V$. For the left singular vectors,
-$A v_i = \sigma_i u_i$, so $u_i = A v_i / \sigma_i$ whenever $\sigma_i \neq 0$.
-If $\operatorname{rank}(A) = r$ then
+and these $v_i$ form the columns of $V$. For the left singular vectors,
+multiplying through by $A$ gives $A v_i = \sigma_i u_i$, so
+$u_i = A v_i / \sigma_i$ whenever $\sigma_i \neq 0$. If
+$\operatorname{rank}(A) = r$, only the first $r$ singular values are positive
+and
 \begin{equation}
   A = U \Sigma V^{\mathsf{T}} = \sum_{i=1}^{r} \sigma_i u_i v_i^{\mathsf{T}},
   \qquad \sigma_1 \geq \sigma_2 \geq \cdots \geq \sigma_r > 0 .
@@ -197,60 +229,68 @@ The columns of $V$ and $U$ corresponding to non-zero singular values give
 orthonormal bases for the row space and column space of $A$ respectively. Those
 orthonormal bases are what make the decomposition suitable for projection.
 
-\subsection{Why the classical derivation is the wrong algorithm}
+\subsection{Choosing the algorithm}
 \label{sec:jacobi}
 
 The derivation above is correct mathematics and a poor numerical recipe.
 Forming $A^{\mathsf{T}}A$ squares the condition number: if
 $\kappa(A) = \sigma_1/\sigma_n$, then $\kappa(A^{\mathsf{T}}A) = \kappa(A)^2$.
 Singular values below $\sqrt{\varepsilon}\,\sigma_1$ are lost to rounding
-before the eigensolver sees them.
+before an eigensolver ever sees them.
 
-This is not hypothetical for audio features, which are strongly correlated ---
-energy with loudness, both against acousticness. Figure~\ref{fig:backend}
-measures it on a near-collinear matrix: the $A^{\mathsf{T}}A$ route reaches a
+This is not a hypothetical concern for acoustic features, which are strongly
+correlated --- energy with loudness, both against acousticness.
+Figure~\ref{fig:backend} measures the effect on a matrix with four dominant
+directions and five at noise scale: the $A^{\mathsf{T}}A$ route reaches a
 relative error of $\eighMaxRelErr$ on the trailing components, while one-sided
 Jacobi holds $\jacobiMaxRelErr$.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.62\textwidth]{fig_backend_accuracy.png}
-  \caption{Relative error per singular value on a matrix with four dominant
-  directions and five at noise scale. The two algorithms are indistinguishable
-  on the leading components and differ by eight orders of magnitude on the
-  trailing ones.}
+  \caption{Relative error per singular value on a near-collinear matrix. The
+  two algorithms are indistinguishable on the leading components and differ by
+  eight orders of magnitude on the trailing ones.}
   \label{fig:backend}
 \end{figure}
 
-One-sided Jacobi never forms $A^{\mathsf{T}}A$. It orthogonalises the columns
-of $A$ directly by plane rotations $A \leftarrow A J(p,q,\theta)$ chosen so
-columns $p$ and $q$ become orthogonal. Rotations are orthogonal, so the
-singular values are preserved exactly. At convergence $A = U\Sigma$, giving
-$\sigma_i = \lVert a_i \rVert$ and $u_i = a_i / \sigma_i$, with $V$ the
-accumulated product of rotations. This is the algorithm behind LAPACK's
-\code{dgesvj}, and it computes singular values to high \emph{relative}
-accuracy \cite{demmel1992}.
+One-sided Jacobi avoids the problem by never forming $A^{\mathsf{T}}A$. It
+orthogonalises the columns of $A$ directly through plane rotations
+$A \leftarrow A\, J(p,q,\theta)$, each chosen so that columns $p$ and $q$
+become mutually orthogonal. Rotations are orthogonal transformations, so the
+singular values are preserved exactly at every step. At convergence
+$A = U\Sigma$, which gives
+\begin{equation}
+  \sigma_i = \lVert a_i \rVert, \qquad u_i = a_i / \sigma_i,
+\end{equation}
+with $V$ the accumulated product of rotations. The rotation angle for each pair
+comes from the $2\times2$ Gram block, exactly as in the Jacobi eigenvalue
+algorithm, but applied one-sidedly. This is the method behind LAPACK's
+\code{dgesvj}, and it computes singular values to high \emph{relative} accuracy
+\cite{demmel1992}.
 
 \paragraph{A caution about how to measure this.} Reconstruction error does not
 reveal the difference. Both algorithms reconstruct $A$ to $\sim 10^{-16}$
 relative Frobenius error, because that norm is dominated by the largest
-singular values. It is relative error \emph{per singular value} that
-discriminates. Reaching for the obvious metric would have hidden the problem
+singular values --- an algorithm can mangle every small component and still
+appear excellent. It is relative error \emph{per singular value} that
+discriminates. Reaching for the obvious metric would hide the problem
 entirely.
 
 \subsection{Projection}
 
-We keep the top $k$ right singular vectors and project:
+We retain the top $k$ right singular vectors and project:
 \begin{equation}
   B_k = B \cdot V_k .
 \end{equation}
 It may seem odd to call a matrix multiplication a projection, but for an
-orthonormal basis the two coincide. Projecting $\mathbf{v}$ onto
-$\{\mathbf{w}_1,\dots,\mathbf{w}_k\}$ gives coordinates
+orthonormal basis the two coincide. Projecting a vector $\mathbf{v}$ onto
+$\{\mathbf{w}_1,\dots,\mathbf{w}_k\}$ gives
 \begin{equation}
-  \operatorname{proj}(\mathbf{v}) = \sum_{i=1}^{k} (\mathbf{v}\cdot\mathbf{w}_i)\mathbf{w}_i ,
+  \operatorname{proj}(\mathbf{v}) = \sum_{i=1}^{k} (\mathbf{v}\cdot\mathbf{w}_i)\,\mathbf{w}_i ,
 \end{equation}
-and collecting the $\mathbf{w}_i$ as columns of $W$, the coordinate vector is
+and collecting the $\mathbf{w}_i$ as columns of a matrix $W$, the coordinates
+in that basis are
 \begin{equation}
   \mathbf{v}^{\mathsf{T}} W = \big[(\mathbf{v}\cdot\mathbf{w}_1), \ldots, (\mathbf{v}\cdot\mathbf{w}_k)\big].
 \end{equation}
@@ -260,17 +300,22 @@ Applied to every row of $B$ at once, this is exactly $B_k = B V_k$.
 matrix, and orthogonal transformations preserve both inner products and norms.
 Cosine similarity is therefore \emph{invariant} under the untruncated
 projection: an SVD-based recommender at full rank is mathematically identical
-to one with no SVD at all. We use this as a correctness check in
-Section~\ref{sec:eval} --- and it sharpens the research question, because it
-means any effect of the decomposition comes entirely from \emph{truncation}.
+to one using no decomposition at all.
+
+Two things follow. First, this is a strong end-to-end correctness check, and we
+use it as one in Section~\ref{sec:eval} --- any error in scaling, decomposition
+or ranking would break the equality. Second, it sharpens the research question.
+Whatever the decomposition contributes, it contributes entirely through
+\emph{truncation}. The interesting quantity is not whether to use an SVD but
+how much to throw away.
 
 \subsection{Geometric visualisation}
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{fig_projection.png}
-  \caption{A seed playlist (coral) against the catalogue (grey), in three raw
-  features and in the leading three latent dimensions. The latent view
+  \caption{A seed playlist (coral) against the catalogue (grey), shown in three
+  raw features and in the leading three latent dimensions. The latent view
   concentrates the playlist, which is what makes proximity in this space a
   usable ranking signal.}
   \label{fig:projection}
@@ -279,103 +324,129 @@ means any effect of the decomposition comes entirely from \emph{truncation}.
 \section{Choosing the number of dimensions}
 \label{sec:rank}
 
-The original study fixed $k=5$ on the reasoning that ``a value much smaller
-than the original feature dimension works best.'' Since $k$ controls how much
-information the recommender is allowed to see, it deserves an argument. We
-implement three standard rules:
+The parameter $k$ controls how much information the recommender is permitted to
+see, so it deserves an argument rather than a convention. We implement three
+standard criteria:
 
 \begin{itemize}
-  \item \textbf{Variance threshold}: smallest $k$ whose cumulative explained
-        variance reaches 90\%.
+  \item \textbf{Variance threshold}: the smallest $k$ whose cumulative
+        explained variance reaches 90\%. Interpretable, but the threshold is
+        arbitrary.
   \item \textbf{Elbow}: the knee of the scree curve, located by maximum
-        perpendicular distance from the chord joining its endpoints.
+        perpendicular distance from the chord joining its endpoints. No
+        threshold to choose, but it presumes a knee exists.
   \item \textbf{Gavish--Donoho}: the asymptotically optimal hard threshold for
-        a low-rank signal in i.i.d.\ Gaussian noise, which requires no
-        threshold parameter at all \cite{gavish2014}.
+        recovering a low-rank signal from i.i.d.\ Gaussian noise, which
+        requires no free parameter at all --- the matrix aspect ratio
+        determines everything \cite{gavish2014}.
 \end{itemize}
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{fig_spectrum.png}
-  \caption{Scree plot and cumulative explained variance, with each rule's
-  choice marked. The three rules disagree sharply: $k=\kVariance$,
-  $k=\kElbow$, $k=\kGavishDonoho$.}
+  \caption{Scree plot and cumulative explained variance, with each criterion's
+  choice marked. They disagree sharply: $k=\kVariance$, $k=\kElbow$ and
+  $k=\kGavishDonoho$ respectively.}
   \label{fig:spectrum}
 \end{figure}
 
-That disagreement is itself a finding. Gavish--Donoho asks how many components
-exceed what noise alone would produce, and answers $\kGavishDonoho$; the
-variance rule asks how many are needed to reconstruct the data, and answers
-$\kVariance$. When a spectrum is close to flat, these questions have very
-different answers. The original paper's own reported singular values
-($126.85$, $89.32$, $85.21$, $80.53$, $79.57$) show the same shape --- one
-dominant component, then a nearly level tail. That is a quantitative signal
-that $k=5$ was retaining components largely indistinguishable from noise, and
-it anticipates the negative result in Section~\ref{sec:eval}.
+That disagreement is itself a finding, and it is not a defect in any of the
+three rules --- they are answering different questions. Gavish--Donoho asks how
+many components exceed what noise alone would produce, and answers
+$\kGavishDonoho$. The variance criterion asks how many are needed to
+reconstruct the data faithfully, and answers $\kVariance$. When a spectrum has
+one dominant component followed by a near-level tail, as ours does
+(Figure~\ref{fig:spectrum}, left), those questions have very different answers,
+and a flat tail is exactly the regime in which retained components are hard to
+distinguish from noise. This anticipates the result in
+Section~\ref{sec:eval}.
 
-\paragraph{Reporting explained variance correctly.} The original implementation
-normalised the truncated spectrum against itself, so it reported that the
-retained components explained 100\% of variance for every value of $k$. The
-denominator must be the full spectrum. Our model retains
-$\retainedVariance\%$ across $\modelK$ of $\nComponents$ components.
+\paragraph{Reporting explained variance.} One arithmetic detail is worth
+stating because it is easy to get wrong. Explained variance must be denominated
+against the \emph{full} spectrum:
+\begin{equation}
+  \text{EVR}_i = \frac{\sigma_i^2}{\sum_{j=1}^{n} \sigma_j^2},
+\end{equation}
+where the sum runs over all $n$ components, not merely the $k$ retained.
+Normalising a truncated spectrum against itself makes every configuration
+appear to explain 100\% of variance regardless of $k$, which is both false and
+conveniently flattering. Our model retains $\retainedVariance\%$ across
+$\modelK$ of $\nComponents$ components.
 
-\section{Latent features}
+\section{Latent features and explanation}
 
-Figure~\ref{fig:loadings} shows the loadings. Signs are canonicalised --- the
-largest-magnitude entry of each right singular vector is forced positive ---
-because the SVD is unique only up to a simultaneous sign flip of $u_i$ and
-$v_i$. Without pinning it, a component documented as ``high energy, loud'' can
-reappear as ``low energy, quiet'' on a different machine or data slice, which
-makes any written interpretation unreliable.
+Figure~\ref{fig:loadings} shows the loadings --- each latent component
+expressed as a weighting of the original descriptors. Because the components
+are mutually orthogonal, each captures an uncorrelated axis of acoustic
+variation.
+
+Signs are canonicalised: the largest-magnitude entry of each right singular
+vector is forced positive. This matters for interpretation. The decomposition
+is unique only up to a simultaneous sign flip of $u_i$ and $v_i$, so without
+pinning a convention a component described in prose as ``high energy, loud''
+can reappear as ``low energy, quiet'' on a different machine or a different
+slice of data, making any written interpretation unreliable.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.92\textwidth]{fig_loadings.png}
-  \caption{Latent feature loadings. Each row is one component expressed as a
-  weighting of the original audio features; each is orthogonal to the others,
-  so they capture uncorrelated axes of variation.}
+  \caption{Latent feature loadings, the rows of $V_k^{\mathsf{T}}$. Each row is
+  one component expressed as a weighting of the original audio features.}
   \label{fig:loadings}
 \end{figure}
 
-Because the components are orthonormal, cosine similarity in latent space
-decomposes exactly:
+Orthonormality also gives us explanation for free. For unit-normalised latent
+vectors $\hat q$ and $\hat r$, cosine similarity decomposes exactly:
 \begin{equation}
   \cos(q, r) = \sum_{i=1}^{k} \hat{q}_i \hat{r}_i ,
   \label{eq:explain}
 \end{equation}
-for unit-normalised $\hat q, \hat r$. Each term is precisely the contribution
-of component $i$ to the match. Paired with that component's loadings, this
-turns every recommendation into an explanation: \emph{matched on the
-energy--loudness axis, which both tracks score high on}. The original system
-computed both halves of this and never connected them.
+so the term $\hat q_i \hat r_i$ is precisely the contribution of component $i$
+to the match, and the terms sum to the score. Paired with that component's
+loadings, this turns every recommendation into a sentence: \emph{matched on the
+energy--loudness axis, which both tracks score high on}. A recommender that
+reports only a similarity score asks the reader to take the mathematics on
+faith; the decomposition needed to avoid that is already computed.
 
 \section{Recommendation strategies}
+\label{sec:strategies}
 
-Both original strategies are retained, with two additions.
+We implement four strategies over the latent representation.
 
 \begin{itemize}
-  \item \textbf{One-per-song} --- one recommendation per seed, maximising
-        coverage of the input playlist.
-  \item \textbf{Overall top} --- the globally highest-scoring candidates.
-  \item \textbf{Centroid} --- query by the playlist's mean latent vector.
+  \item \textbf{One-per-song} --- one recommendation per seed track, ensuring
+        every input contributes and maximising coverage of the playlist.
+  \item \textbf{Overall top} --- the globally highest-scoring candidates,
+        maximising coherence with whatever dominates the input.
+  \item \textbf{Centroid} --- query by the playlist's mean latent vector, its
+        ``taste vector''. This differs from averaging per-seed scores: it is
+        more sensitive to a playlist that is coherent in direction and less to
+        a single outlying seed.
   \item \textbf{Maximal Marginal Relevance} --- greedily select the candidate
         maximising
         \[
           \lambda \cdot \mathrm{rel}(d) \;-\; (1-\lambda)\max_{s \in S}\mathrm{sim}(d,s),
         \]
-        trading relevance against redundancy with an explicit parameter
-        \cite{carbonell1998}.
+        so each pick must be both close to the playlist and unlike what has
+        already been chosen \cite{carbonell1998}.
 \end{itemize}
 
-MMR deserves comment. The original \emph{overall top} maximised similarity and
-the original \emph{one-per-song} approximated diversity by construction, with
-no way to sit between them. MMR makes the trade-off a dial rather than a
-choice of algorithm.
+The first two sit at opposite ends of a relevance--diversity spectrum with
+nothing in between: one maximises similarity, the other enforces variety by
+construction. MMR makes that trade-off an explicit parameter rather than a
+choice of algorithm, and $\lambda$ can be tuned against the metrics in
+Section~\ref{sec:eval}.
 
-We also aggregate per-seed scores by \code{max}, \code{mean} or Borda count
-rather than \code{max} alone. Under \code{max}, a single atypical seed can
-dominate the entire result list --- a real concern for the original study,
-whose input playlist contained duplicated entries.
+Per-seed scores are aggregated by \code{max}, \code{mean} or Borda count. The
+choice is not cosmetic: under \code{max}, a single atypical seed can dominate
+the entire result list, a real hazard for playlists containing outliers or
+duplicated entries. Borda count aggregates ranks rather than scores and is
+immune to one seed having systematically higher cosine values than another.
+
+We additionally support a per-artist cap, popularity de-biasing (subtracting a
+weighted popularity term so that results are not simply the chart re-ordered),
+and Rocchio-style negative feedback that steers the query away from tracks the
+listener rejects.
 
 \section{Evaluation}
 \label{sec:eval}
@@ -388,29 +459,34 @@ groups we sample three tracks as a query playlist and hold out the artist's
 remaining tracks as the relevant set. Seeds are excluded from results, so no
 system can score by returning the query.
 
-We report accuracy (hit rate, recall, MRR, NDCG) and beyond-accuracy measures
-(intra-list diversity, catalogue coverage). Diversity is computed in the shared
-scaled-feature space rather than any model's own latent space, so no system is
-graded in the geometry most flattering to it.
+We report accuracy (hit rate, recall, MRR, NDCG) alongside beyond-accuracy
+measures (intra-list diversity, catalogue coverage). Both families are
+necessary: a system returning the ten most popular songs for every query can
+score respectably on accuracy while being useless, and only coverage and
+diversity expose that. Diversity is computed in the shared scaled-feature space
+rather than in any model's own latent space, so that no system is graded in the
+geometry most flattering to it.
 
 \paragraph{What this protocol is not.} It measures whether a system recovers
 known stylistic neighbours from audio alone. It structurally \emph{penalises}
-the cross-genre discovery the project is interested in: a genuinely surprising
+the cross-genre discovery that motivates the project: a genuinely surprising
 good recommendation lies outside the ground-truth group and scores as a miss.
-Read the numbers as ``does the latent space encode real structure'', not as
-``is this a good product''.
+The numbers should be read as ``does the latent space encode real structure'',
+not as ``is this a good product''.
 
 \subsection{Baselines}
 
 \begin{itemize}
   \item \textbf{Random} --- the floor. Any metric a system cannot beat here is
         measuring noise.
-  \item \textbf{Popularity} --- ignores the query entirely. Deceptively strong
-        on accuracy metrics, which is exactly why it belongs.
+  \item \textbf{Popularity} --- ignores the query entirely and returns the most
+        popular tracks. Deceptively strong on accuracy metrics, which is
+        exactly why it belongs.
   \item \textbf{Raw cosine} --- cosine similarity on the nine scaled features,
-        no decomposition. \textbf{This is the control that matters.} The entire
-        justification for the SVD is that projecting to a latent subspace beats
-        using the features directly.
+        with no decomposition. \textbf{This is the control that matters.} The
+        entire justification for the SVD is that projecting to a latent
+        subspace beats using the features directly, and that is a hypothesis
+        rather than a premise.
 \end{itemize}
 
 \subsection{Results}
@@ -419,8 +495,8 @@ Read the numbers as ``does the latent space encode real structure'', not as
   \centering
   \small
   \input{figures/table_evaluation}
-  \caption{Held-out-artist evaluation, $\nQueries$ queries. Higher is better
-  throughout. $\dagger$ marks systems whose NDCG difference from
+  \caption{Held-out-artist evaluation over $\nQueries$ queries. Higher is
+  better throughout. $\dagger$ marks systems whose NDCG difference from
   \code{raw\_cosine} is not statistically significant under a paired bootstrap
   test.}
   \label{tab:eval}
@@ -431,62 +507,72 @@ Read the numbers as ``does the latent space encode real structure'', not as
   \includegraphics[width=\textwidth]{fig_evaluation.png}
   \caption{Accuracy and diversity. Every latent model beats random and
   popularity by a wide margin --- the features carry real signal. None beats
-  the no-SVD control on accuracy.}
+  the no-decomposition control on accuracy.}
   \label{fig:evaluation}
 \end{figure}
 
-Three things follow from Table~\ref{tab:eval}.
+Three findings follow from Table~\ref{tab:eval}.
 
 \paragraph{The pipeline is correct.} \code{svd\_k9} reproduces
 \code{raw\_cosine} to every reported digit on every metric
 ($\Delta = \fullRankGap$). This is the identity predicted in
-Section~\ref{sec:svd}: at full rank the projection is a rotation, and cosine
-similarity is rotation-invariant. Any implementation error in scaling,
-decomposition or ranking would break this equality.
+Section~\ref{sec:svd}: at full rank the projection is an orthogonal rotation,
+and cosine similarity is rotation-invariant. It is a demanding end-to-end
+check, since an error anywhere in scaling, decomposition or ranking would break
+the equality.
 
-\paragraph{Truncation to $k=7$ costs nothing measurable.}
-$\bestSvd$ scores $\bestSvdNdcg$ against $\rawNdcg$ for raw cosine. A paired
-bootstrap over the shared queries gives
-$\Delta = \bestSvdDelta$, 95\% CI $[\bestSvdCiLow, \bestSvdCiHigh]$,
-$p = \bestSvdP$. The interval contains zero: on this evidence the two are
-indistinguishable. Meanwhile diversity rises from $\rawDiversity$ to
-$\bestSvdDiversity$ and coverage from $\rawCoverage$ to $\bestSvdCoverage$.
-Discarding two dimensions is free, and it broadens the results.
+\paragraph{Truncation to $k=7$ costs nothing measurable.} $\bestSvd$ scores
+$\bestSvdNdcg$ against $\rawNdcg$ for raw cosine. A paired bootstrap over the
+shared queries gives $\Delta = \bestSvdDelta$ with a 95\% confidence interval
+of $[\bestSvdCiLow, \bestSvdCiHigh]$ and $p = \bestSvdP$. The interval contains
+zero: on this evidence the two are indistinguishable. Meanwhile intra-list
+diversity rises from $\rawDiversity$ to $\bestSvdDiversity$ and catalogue
+coverage from $\rawCoverage$ to $\bestSvdCoverage$. Discarding two dimensions
+is free, and it broadens the results.
 
-\paragraph{Aggressive truncation is significantly worse.} At $k \leq 5$ every
+\paragraph{Aggressive truncation is significantly worse.} For $k \leq 5$ every
 comparison against raw cosine is significant at $p < 0.01$, and accuracy falls
-monotonically with $k$. The original choice of $k=5$ sits on the wrong side of
-that boundary.
+monotonically as $k$ decreases.
 
-The pairing matters. These systems are evaluated on identical queries, so the
-per-query differences share the query-difficulty variance; testing them as
-independent samples would badly overstate the uncertainty and could easily turn
-a null result into a spurious one.
+\paragraph{On pairing.} All systems are evaluated on identical queries, so the
+per-query differences share the query-difficulty variance. Testing them as
+independent samples would discard that shared structure, overstate the
+uncertainty, and risk converting a null result into a spurious one --- or the
+reverse. The comparison must be paired, and the bootstrap must resample query
+indices rather than each system separately.
 
 \subsection{Interpretation}
 
 The honest summary is that dimensionality reduction is not an accuracy
-technique here. It is a diversity technique. There is a regime ($k=7$) where it
-is free, and below that you are trading measurable accuracy for measurable
-variety --- which may still be the right trade for a discovery product, but it
-should be made deliberately rather than assumed.
+technique in this setting. It is a diversity technique. There is a regime
+($k=7$) where it is free, and below that one trades measurable accuracy for
+measurable variety. That may well be the right trade for a discovery product,
+where surfacing unfamiliar material is the point --- but it should be made
+deliberately rather than assumed, and the shape of the trade is now something
+this system can report rather than something its author has to claim.
 
-This does not vindicate the original conclusion, and it does not refute the
-method. It replaces an untested claim with a measured trade-off.
+It is worth stating plainly what this does \emph{not} show. It does not show
+the SVD is useless: the full-rank identity means the decomposition is exactly
+as good as the raw features by construction, and the latent representation is
+$22\%$ smaller at $k=7$ with no measurable loss, which matters at catalogue
+scale. Nor does it show that latent structure is absent --- Section~\ref{sec:genre}
+demonstrates the opposite. It shows that on this retrieval task, compression
+does not buy accuracy.
 
 \section{Does audio-feature classification reproduce genre?}
 \label{sec:genre}
 
-The original abstract asked whether classifying music by features would
-``result in similar genre-based definitions, or would the classification of
-music be revamped.'' Recommendation quality cannot answer that. Clustering can.
+We now return to the question posed in the abstract. Recommendation quality
+cannot answer it; clustering can.
 
 We partition the latent space with $k$-means (k-means++ seeding, ten restarts)
-into as many clusters as there are genre labels, then measure agreement with
-metrics that are invariant to label permutation and corrected for chance:
-Adjusted Rand Index and Normalised Mutual Information. Purity is reported
-alongside but not relied upon --- it can be driven to 1 simply by using more
-clusters.
+into as many clusters as there are genre labels, then measure agreement between
+the partition and the labels. The metrics are chosen to be invariant to label
+permutation --- cluster 3 has no intrinsic relationship to ``jazz'', so any
+measure depending on which integer was assigned to which group is meaningless
+here --- and corrected for chance: Adjusted Rand Index \cite{hubert1985} and
+Normalised Mutual Information. Purity is reported alongside but not relied
+upon, since it can be driven to 1 simply by using more clusters.
 
 \begin{figure}[H]
   \centering
@@ -506,152 +592,140 @@ clusters.
   \label{fig:genrespace}
 \end{figure}
 
-Agreement is partial: ARI $=\ari$, NMI $=\nmi$, purity $=\clusterPurity$,
+Agreement is partial: ARI $=\ari$, NMI $=\nmi$, purity $=\clusterPurity$ and
 silhouette $=\silhouette$ across $\nGenres$ genres. The partition
 \clusterVerdict{}. Neither extreme holds --- the taxonomy is neither recovered
-nor unrelated --- and the structure in Figure~\ref{fig:confusion} is more
-informative than the scalars:
+nor unrelated --- and the structure visible in Figure~\ref{fig:confusion} is
+considerably more informative than the scalar summaries:
 
 \begin{itemize}
   \item \textbf{Cleanly separable.} Hip-hop (88\% of its cluster), live
         recordings (87\%) and EDM (78\%) each occupy a cluster of their own.
         These are categories defined by \emph{production}: speechiness,
-        audience noise, synthetic timbre. Audio features measure production
+        audience noise, synthetic timbre. Audio descriptors measure production
         directly.
   \item \textbf{Merged.} Ambient and classical are split across two clusters,
         each of which is a mixture of both. The features cannot separate them
-        at all: both are quiet, acoustic, instrumental and low-energy.
-  \item \textbf{Dissolved.} Pop, rock and R\&B do not form clusters. They are
-        spread across three mixed groups. These are categories defined by
-        lineage, instrumentation convention and marketing --- none of which the
-        nine features observe.
+        at all --- both are quiet, acoustic, instrumental and low-energy ---
+        even though the two are historically and culturally distinct.
+  \item \textbf{Dissolved.} Pop, rock and R\&B form no clusters of their own,
+        spreading instead across three mixed groups. These are categories
+        defined by lineage, instrumentation convention and marketing, none of
+        which the nine descriptors observe.
 \end{itemize}
 
-So the answer to the original question is: \emph{revamped, but not
-arbitrarily}. Audio features reorganise music along an axis of production
-character rather than genre ancestry. Where a genre label happens to encode
-production, it survives; where it encodes history, it dissolves.
+The answer, then, is: \emph{reorganised, but not arbitrarily}. Audio features
+impose an axis of production character rather than genre ancestry. Where a
+genre label happens to encode production, it survives the translation; where it
+encodes history, it dissolves. This is a coherent alternative taxonomy rather
+than noise, and it suggests that the disagreements between acoustic similarity
+and genre metadata are systematic and predictable rather than incidental.
 
-\paragraph{Caveat.} This finding is measured on a synthetic catalogue whose
-genre profiles were specified by hand, and the merges partly reflect overlaps
-in those specifications --- ambient and classical were given deliberately
-similar profiles. The methodology transfers; this particular result should be
-re-measured on a real corpus before being relied upon. The command to do so is
-one line (Section~\ref{sec:repro}).
+\paragraph{Caveat.} This result is measured on a synthetic catalogue whose
+genre profiles were specified by hand, and the observed merges partly reflect
+overlaps in those specifications --- ambient and classical were given
+deliberately similar acoustic profiles. The methodology transfers directly;
+this particular finding should be re-measured on a real corpus before being
+relied upon, and doing so requires one command (Section~\ref{sec:repro}).
 
-\section{Defects in the original pipeline}
-\label{sec:defects}
-
-Four defects materially affected the original results. Each was reproduced
-before being fixed, and each now has a regression test.
-
-\subsection{Self-recommendation}
-
-The clearest evidence is in the original paper itself. Cross-referencing its
-published recommendations (\S4.3) against its own input playlist (\S4.1):
-
-\begin{table}[H]
-  \centering\small
-  \begin{tabular}{ll}
-    \toprule
-    Track & Status \\
-    \midrule
-    \emph{Slime You Out} (feat. SZA) & in the input playlist, returned as a recommendation \\
-    \emph{All The Stars} (with SZA) & in the input playlist, returned \\
-    \emph{I Hate U} & in the input playlist, returned \\
-    \emph{What Lovers Do} (feat. SZA) & in the input playlist, returned \emph{twice} \\
-    \emph{when the party's over} & returned \emph{twice} \\
-    \bottomrule
-  \end{tabular}
-  \caption{Duplicates and self-recommendations in the original published
-  results. The input playlist also listed \emph{What Lovers Do} and \emph{All
-  The Stars} twice each, which compounds the effect under \code{max}
-  aggregation.}
-\end{table}
-
-The cause is Section~\ref{sec:dedup}: exclusion by row index in a dataset with
-many rows per track. Roughly a quarter of the reported recommendations were
-either input tracks or repeats.
-
-\subsection{Explained variance always reported as 100\%}
-
-The truncated spectrum was normalised against itself. Every configuration
-therefore appeared to explain all variance, making the figure uninformative and
-concealing how little the trailing components contributed.
-
-\subsection{Scale-dependent convergence}
-
-The eigensolver tested convergence by comparing an absolute off-diagonal sum
-against $10^{-10}$. That sum grows with $\lVert A\rVert$, so on a
-$5000$-row matrix the tolerance was unreachable: the solver exhausted its
-iteration budget every time and still exited with off-diagonal mass
-$\approx 8\times 10^{-3}$. Both replacement solvers use relative tolerances.
-
-\subsection{Unrunnable entry point}
-
-The program printed \textsc{u+2713 check mark} unconditionally. On a Windows
-console using code page 1252 --- the default on the development machine --- this
-raises \code{UnicodeEncodeError} before any recommendation is printed. All
-terminal output now degrades to ASCII when the active encoding cannot represent
-a glyph, and continuous integration runs the test suite under cp1252 so the
-regression cannot pass on a UTF-8 runner and still fail on a real desktop.
-
-\section{Implementation and reproducibility}
-\label{sec:repro}
+\section{Implementation notes}
+\label{sec:impl}
 
 Every decomposition is implemented from the underlying mathematics: Householder
-QR, two symmetric eigensolvers, one-sided Jacobi SVD, randomized SVD, cosine
-similarity, Levenshtein distance, $k$-means, and all ranking and agreement
+QR, two symmetric eigensolvers (shifted QR with deflation, and cyclic Jacobi),
+one-sided Jacobi SVD, randomized SVD \cite{halko2011}, cosine similarity,
+Levenshtein distance for track lookup, $k$-means, and all ranking and agreement
 metrics. NumPy supplies array storage and elementwise operations;
 \code{numpy.linalg} appears only in the test suite, as ground truth.
 
+Three implementation details proved to matter more than expected, and are worth
+recording for anyone building something similar.
+
+\paragraph{Convergence tolerances must be relative.} An iterative eigensolver
+that tests convergence by comparing an absolute off-diagonal sum against a
+fixed constant will behave differently at different catalogue sizes, because
+that sum scales with $\lVert A \rVert$. On a large matrix the tolerance becomes
+unreachable and the solver silently exhausts its iteration budget every time.
+Both of our eigensolvers scale their tolerance by the Frobenius norm.
+
+\paragraph{Sign conventions must be pinned.} As noted in Section~5, an
+unconstrained SVD produces components whose sign is an artefact of the
+arithmetic, which makes any prose interpretation of a loading unreliable across
+runs.
+
+\paragraph{Terminal output must survive the local encoding.} Catalogue metadata
+is full of accented and non-Latin track titles, and a console using a legacy
+code page will raise an encoding error rather than print them. All output
+degrades to ASCII when the active encoding cannot represent a character, and
+continuous integration runs the test suite under a legacy code page as well as
+UTF-8.
+
 The system is verified by 326 tests covering reconstruction accuracy,
 orthogonality, Eckart--Young optimality of the rank-$k$ truncation,
-cross-backend agreement, and a regression test for each defect in
-Section~\ref{sec:defects}.
+cross-backend agreement, and the behaviour of each metric at its known
+extremes.
+
+\section{Reproducibility}
+\label{sec:repro}
 
 Every figure, table and quoted number in this paper is produced by a single
-command, so the document cannot drift from the code:
+command, so the document cannot drift from the code that produced it:
 
 \begin{quote}
-\code{python paper/make\_figures.py}\\
-\code{python paper/make\_figures.py --data data/songs.csv} \quad\% any catalogue
+\code{python paper/build.py}\\
+\code{python paper/build.py --data data/songs.csv} \quad\% any catalogue
 \end{quote}
+
+The build regenerates each figure, writes the results table, and emits every
+quoted quantity as a LaTeX macro that the prose references in place of a
+literal. Changing $k$, the scaling, or the ranking strategy and rebuilding
+updates the text along with the figures.
 
 \section{Limitations}
 
 \begin{itemize}
   \item \textbf{Synthetic corpus.} All results come from a generated catalogue
-        (see \S\ref{par:data}). The generative structure is known and
+        (see \S\ref{par:data}). Its generative structure is known and
         influences the outcome, particularly the genre merges of
         Section~\ref{sec:genre}.
-  \item \textbf{Proxy ground truth.} Shared authorship is a stand-in for
-        relevance. It penalises exactly the cross-genre discovery this system
-        aims at.
-  \item \textbf{Nine features.} The audio features describe production, not
-        melody, harmony, lyrics or structure. The dissolution of pop, rock and
-        R\&B in Section~\ref{sec:genre} may say more about that limitation than
-        about the genres.
+  \item \textbf{Proxy ground truth.} Shared authorship stands in for relevance.
+        It penalises exactly the cross-genre discovery this system aims at, and
+        conflates an artist's stylistic consistency with acoustic similarity.
+  \item \textbf{Nine descriptors.} The features describe production, not
+        melody, harmony, lyrics or song structure. The dissolution of pop, rock
+        and R\&B in Section~\ref{sec:genre} may say more about that limitation
+        than about the genres themselves.
+  \item \textbf{Linearity.} SVD finds the best \emph{linear} subspace. If
+        acoustic similarity is governed by a curved manifold, a linear
+        projection will miss it, and a nonlinear method might reach a different
+        conclusion about the value of reduction.
   \item \textbf{No listener study.} Every claim here is offline. Whether any of
         it corresponds to what a person would enjoy is untested.
 \end{itemize}
 
 \section{Conclusion}
 
-Adding an evaluation harness to this project produced a negative result about
-its central method, and that is the outcome worth keeping. Dimensionality
-reduction did not improve retrieval accuracy over the raw features; at $k=7$ it
-was free, and below that it cost accuracy to buy diversity. The full-rank
-identity between the SVD recommender and plain cosine similarity makes the
-reason precise: the decomposition contributes nothing except through
-truncation, and truncation is a trade rather than a gain.
+We set out to recommend music from acoustic descriptors rather than genre tags,
+and to find out whether the resulting organisation of music resembles the
+taxonomy we already use.
 
-The clustering analysis answers the question the original study posed. Audio
-features do not reproduce the genre taxonomy, and they do not scramble it
-either. They reorganise music by production character --- separating hip-hop,
-EDM and live recordings cleanly, merging ambient with classical, and dissolving
-pop, rock and R\&B entirely. That reorganisation is the interesting object, and
-it is now something the repository can measure rather than assert.
+On the first question the answer is more qualified than we expected.
+Dimensionality reduction did not improve retrieval accuracy over the raw scaled
+features. At $k=7$ it was free; below that it cost accuracy in exchange for
+diversity and coverage. The full-rank identity between the SVD recommender and
+plain cosine similarity makes the reason precise: the decomposition contributes
+nothing except through truncation, and truncation is a trade rather than a
+gain. Reporting this required baselines and paired significance tests, and it
+is the kind of result a project without them would not have found.
+
+On the second question the answer is more interesting. Audio features neither
+reproduce the genre taxonomy nor scramble it. They reorganise music by
+production character --- separating hip-hop, EDM and live recordings cleanly,
+merging ambient with classical, and dissolving pop, rock and R\&B entirely.
+That reorganisation is a coherent alternative view of a catalogue rather than a
+failure to recover the familiar one, and it is the more promising direction for
+future work: not better retrieval of what genre already tells us, but
+description of the structure genre leaves out.
 
 \begin{thebibliography}{9}
 \small

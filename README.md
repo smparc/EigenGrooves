@@ -158,7 +158,7 @@ means is not by itself evidence. Held-out-artist protocol, 219 queries:
 system         hit_rate@10  recall@10  mrr     ndcg@10  diversity  coverage   vs raw_cosine
 -------------  -----------  ---------  ------  -------  ---------  --------   ------------------
 raw_cosine     0.3242       0.0351     0.0865  0.0371   0.2125     0.4698     (control)
-svd_k9         0.3242       0.0351     0.0865  0.0371   0.2125     0.4698     Δ=0.0000  identical
+svd_auto(k=9)  0.3242       0.0351     0.0865  0.0371   0.2125     0.4698     Δ=0.0000  identical
 svd_k7         0.3059       0.0322     0.0793  0.0340   0.2331     0.4875     p=0.427   n.s.
 svd_k5_whiten  0.2009       0.0224     0.0559  0.0237   0.3208     0.5032     p=0.004   worse
 svd_k5         0.2283       0.0241     0.0508  0.0236   0.2903     0.5052     p=0.002   worse
@@ -168,12 +168,14 @@ random         0.0457       0.0057     0.0154  0.0056   1.0046     0.5202     p<
 popularity     0.0411       0.0033     0.0088  0.0036   1.0131     0.0037     p<0.001   worse
 ```
 
-Reproduce with `eigengrooves evaluate --synthetic`.
+Reproduce with `eigengrooves evaluate --synthetic`. The default sweep reports
+`svd_auto` at the rank the selector picks, which is 7 — the full-rank row above
+needs `eigengrooves evaluate --synthetic --k 9`.
 
 **The honest reading**, in three parts:
 
-*The pipeline is provably correct.* `svd_k9` reproduces `raw_cosine` to every
-digit on every metric. That is the expected identity: at full rank the
+*The pipeline is provably correct.* At full rank (`--k 9`) the SVD model
+reproduces `raw_cosine` to every digit on every metric. That is the expected identity: at full rank the
 projection is an orthogonal rotation, and cosine similarity is rotation-
 invariant. Any bug in scaling, decomposition or ranking would break it. It also
 sharpens the question — the SVD can only do something *through truncation*.
@@ -283,8 +285,8 @@ src/eigengrooves/
 ├── evaluate.py          # held-out protocol and comparison
 ├── matching.py          # Levenshtein, token-set, title normalisation
 ├── console.py           # encoding-safe output
-└── cli.py               # recommend / analyze / evaluate / fetch-data
-tests/                   # 326 tests
+└── cli.py               # recommend / analyze / evaluate / cluster / fetch-data
+tests/                   # 351 tests
 notebooks/analysis.ipynb # visual walkthrough, runs without a dataset
 paper/paper.pdf          # the write-up; rebuild with `python paper/build.py`
 ```
@@ -336,7 +338,7 @@ a real desktop.
 ```bash
 pip install -e ".[dev]"
 
-pytest -q                                    # 284 tests
+pytest -q                                    # 351 tests
 pytest -q --cov=eigengrooves --cov-report=term-missing
 ruff check .
 mypy

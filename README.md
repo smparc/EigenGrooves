@@ -298,7 +298,7 @@ src/eigengrooves/
 ├── matching.py          # Levenshtein, token-set, title normalisation
 ├── console.py           # encoding-safe output
 └── cli.py               # recommend / analyze / evaluate / cluster / fetch-data
-tests/                   # 361 tests
+tests/                   # 355 tests
 notebooks/analysis.ipynb # visual walkthrough, runs without a dataset
 paper/paper.pdf          # the write-up; rebuild with `python paper/build.py`
 ```
@@ -350,7 +350,7 @@ a real desktop.
 ```bash
 pip install -e ".[dev]"
 
-pytest -q                                    # 361 tests
+pytest -q                                    # 355 tests
 pytest -q --cov=eigengrooves --cov-report=term-missing
 ruff check .
 mypy

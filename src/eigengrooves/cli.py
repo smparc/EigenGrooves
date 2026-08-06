@@ -28,8 +28,8 @@ from .console import Console, glyph, rule
 from .evaluate import (
     build_groups,
     compare_rankers,
-    holm_correction,
     format_comparison,
+    holm_correction,
     paired_bootstrap_test,
 )
 from .model import fit_latent_model

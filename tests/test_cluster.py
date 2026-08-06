@@ -17,9 +17,11 @@ from eigengrooves.cluster import (
     silhouette_score,
 )
 from eigengrooves.evaluate import (
+    ComparisonTest,
     bootstrap_ci,
     build_groups,
     evaluate_ranker,
+    holm_correction,
     paired_bootstrap_test,
 )
 
@@ -292,7 +294,40 @@ def test_paired_test_finds_no_difference_between_identical_systems(
 
 
 def test_paired_test_detects_a_real_difference(small_catalog, scaled_features, model):
-    """A working system beating random must register as significant."""
+    """A working system beating random must register as significant.
+
+    Significance reads off the *corrected* p-value, so the family correction is
+    applied even for a family of one — a raw p-value is not yet an answer.
+    """
+    groups = build_groups(small_catalog, seed_size=3, min_group_size=6,
+                          max_groups=120, random_state=0)
+    good = evaluate_ranker(
+        LatentRanker(model, small_catalog), groups, small_catalog, scaled_features, k=10
+    )
+    chance = evaluate_ranker(
+        RandomRanker(len(small_catalog), random_state=0),
+        groups, small_catalog, scaled_features, k=10,
+    )
+
+    (test,) = holm_correction(
+        [paired_bootstrap_test(good, chance, metric="ndcg", random_state=0)]
+    )
+    assert test.difference > 0
+    assert test.significant
+    assert test.p_value < 0.05
+    assert test.ci_low > 0
+
+
+def test_an_uncorrected_comparison_is_never_significant(
+    small_catalog, scaled_features, model
+):
+    """The guard against reading a raw p-value as a verdict.
+
+    A sweep runs eight comparisons against one control. At an uncorrected 5%
+    threshold that family yields a spurious "significant" roughly a third of the
+    time, and the whole point of this harness is that the SVD's value is a
+    hypothesis under test rather than a premise being illustrated.
+    """
     groups = build_groups(small_catalog, seed_size=3, min_group_size=6,
                           max_groups=120, random_state=0)
     good = evaluate_ranker(
@@ -304,10 +339,68 @@ def test_paired_test_detects_a_real_difference(small_catalog, scaled_features, m
     )
 
     test = paired_bootstrap_test(good, chance, metric="ndcg", random_state=0)
-    assert test.difference > 0
-    assert test.significant
-    assert test.p_value < 0.05
-    assert test.ci_low > 0
+    assert test.p_value_adj is None
+    assert not test.significant
+    # ...but the effect is still visible, and still reported.
+    assert test.interval_excludes_zero
+    assert "uncorrected" in test.summary()
+
+
+def test_holm_is_monotone_and_conservative():
+    """Adjusted p-values never decrease, and never fall below the raw value."""
+    raw = [0.001, 0.009, 0.02, 0.04, 0.3, 0.6, 0.9]
+    tests = [
+        ComparisonTest(
+            metric="ndcg", name_a=f"s{i}", name_b="control",
+            mean_a=0.0, mean_b=0.0, difference=0.0,
+            ci_low=-1.0, ci_high=1.0, p_value=p, n_queries=100,
+        )
+        for i, p in enumerate(raw)
+    ]
+
+    corrected = holm_correction(tests)
+    adjusted = [t.p_value_adj for t in corrected]
+
+    assert all(a >= r - 1e-12 for a, r in zip(adjusted, raw))
+    assert adjusted == sorted(adjusted), "step-down must be monotone in rank"
+    assert all(a <= 1.0 for a in adjusted)
+    # Smallest p times the family size: 0.001 * 7.
+    assert adjusted[0] == pytest.approx(0.007)
+
+
+def test_holm_kills_a_lone_borderline_finding():
+    """One p just under 0.05 among seven nulls is what chance produces."""
+    raw = [0.045, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+    tests = [
+        ComparisonTest(
+            metric="ndcg", name_a=f"s{i}", name_b="control",
+            mean_a=0.0, mean_b=0.0, difference=0.01,
+            ci_low=0.001, ci_high=0.02, p_value=p, n_queries=100,
+        )
+        for i, p in enumerate(raw)
+    ]
+
+    corrected = holm_correction(tests)
+    assert not corrected[0].significant
+    # The uncorrected interval still excludes zero — which is exactly why the
+    # verdict must not be read off the interval.
+    assert corrected[0].interval_excludes_zero
+
+
+def test_holm_keeps_a_genuinely_strong_finding():
+    raw = [1e-6] + [0.6] * 7
+    tests = [
+        ComparisonTest(
+            metric="ndcg", name_a=f"s{i}", name_b="control",
+            mean_a=0.0, mean_b=0.0, difference=0.05,
+            ci_low=0.02, ci_high=0.08, p_value=p, n_queries=100,
+        )
+        for i, p in enumerate(raw)
+    ]
+
+    corrected = holm_correction(tests)
+    assert corrected[0].significant
+    assert not any(t.significant for t in corrected[1:])
 
 
 def test_paired_test_reports_query_count(small_catalog, scaled_features, model):

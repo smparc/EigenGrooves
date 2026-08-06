@@ -28,6 +28,7 @@ from .console import Console, glyph, rule
 from .evaluate import (
     build_groups,
     compare_rankers,
+    holm_correction,
     format_comparison,
     paired_bootstrap_test,
 )
@@ -387,13 +388,16 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     if tests:
         console.section(f"Paired bootstrap vs. raw_cosine ({args.test_metric})")
         console.print(
-            f"  {'system':<16} {'difference':>11}  {'95% CI':>22}  {'p':>7}   verdict"
+            f"  {'system':<16} {'difference':>11}  {'95% CI':>22}  "
+            f"{'p':>7}  {'p_adj':>7}   verdict"
         )
         for t in tests:
             verdict = "significant" if t.significant else "n.s."
+            adjusted = "-" if t.p_value_adj is None else f"{t.p_value_adj:.3f}"
             console.print(
                 f"  {t.name_a:<16} {t.difference:>+11.4f}  "
-                f"[{t.ci_low:>+9.4f}, {t.ci_high:>+9.4f}]  {t.p_value:>7.3f}   {verdict}"
+                f"[{t.ci_low:>+9.4f}, {t.ci_high:>+9.4f}]  {t.p_value:>7.3f}  "
+                f"{adjusted:>7}   {verdict}"
             )
 
     console.print("")
@@ -401,8 +405,13 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     console.print("  Higher is better for every column. `random` is the floor;")
     console.print("  `raw_cosine` is the no-SVD control that the latent models")
     console.print("  must beat to justify the decomposition at all.")
-    console.print("  'n.s.' means the 95% interval for the paired difference")
-    console.print("  includes zero - the systems are not distinguishable here.")
+    if tests:
+        console.print(
+            f"  p_adj is Holm-corrected across all {tests[0].n_comparisons} comparisons,"
+        )
+        console.print("  which share one control and so form a single family. The")
+        console.print("  verdict reads off p_adj, never the raw p; the CI is shown")
+        console.print("  for magnitude and is deliberately left uncorrected.")
     return 0
 
 

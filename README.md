@@ -156,21 +156,32 @@ means is not by itself evidence. Held-out-artist protocol, 219 queries:
 
 ```
 system         hit_rate@10  recall@10  mrr     ndcg@10  diversity  coverage   vs raw_cosine
--------------  -----------  ---------  ------  -------  ---------  --------   ------------------
+-------------  -----------  ---------  ------  -------  ---------  --------   --------------------
 raw_cosine     0.3242       0.0351     0.0865  0.0371   0.2125     0.4698     (control)
 svd_auto(k=9)  0.3242       0.0351     0.0865  0.0371   0.2125     0.4698     Δ=0.0000  identical
-svd_k7         0.3059       0.0322     0.0793  0.0340   0.2331     0.4875     p=0.427   n.s.
-svd_k5_whiten  0.2009       0.0224     0.0559  0.0237   0.3208     0.5032     p=0.004   worse
-svd_k5         0.2283       0.0241     0.0508  0.0236   0.2903     0.5052     p=0.002   worse
-svd_k3         0.1370       0.0153     0.0412  0.0169   0.3904     0.5128     p<0.001   worse
-svd_k2         0.0959       0.0086     0.0338  0.0120   0.4973     0.5189     p<0.001   worse
-random         0.0457       0.0057     0.0154  0.0056   1.0046     0.5202     p<0.001   worse
-popularity     0.0411       0.0033     0.0088  0.0036   1.0131     0.0037     p<0.001   worse
+svd_k7         0.3059       0.0322     0.0793  0.0340   0.2331     0.4875     p_adj=0.855  n.s.
+svd_k5_whiten  0.2009       0.0224     0.0559  0.0237   0.3208     0.5032     p_adj=0.012  worse
+svd_k5         0.2283       0.0241     0.0508  0.0236   0.2903     0.5052     p_adj=0.008  worse
+svd_k3         0.1370       0.0153     0.0412  0.0169   0.3904     0.5128     p_adj=0.001  worse
+svd_k2         0.0959       0.0086     0.0338  0.0120   0.4973     0.5189     p_adj=0.001  worse
+random         0.0457       0.0057     0.0154  0.0056   1.0046     0.5202     p_adj=0.001  worse
+popularity     0.0411       0.0033     0.0088  0.0036   1.0131     0.0037     p_adj=0.001  worse
 ```
 
 Reproduce with `eigengrooves evaluate --synthetic`. The default sweep reports
 `svd_auto` at the rank the selector picks, which is 7 — the full-rank row above
 needs `eigengrooves evaluate --synthetic --k 9`.
+
+**The p-values are Holm-corrected**, because every row is tested against the
+same control and the eight comparisons are therefore one family. At an
+uncorrected 5% threshold a family that size throws a spurious "significant"
+roughly a third of the time — and the entire point of this harness is that the
+SVD's value is a hypothesis under test rather than a premise being illustrated.
+Correcting made no difference to any conclusion here (raw p = 0.427, 0.004,
+0.002, <0.001…), which is the outcome worth having: the finding survives the
+stricter test rather than depending on the looser one. `ComparisonTest.significant`
+reads off the adjusted value only, so an uncorrected test reports as not
+significant — in isolation it is not yet an answer.
 
 **The honest reading**, in three parts:
 
@@ -181,12 +192,13 @@ invariant. Any bug in scaling, decomposition or ranking would break it. It also
 sharpens the question — the SVD can only do something *through truncation*.
 
 *Truncating to k=7 costs nothing measurable.* Δ = −0.0031, 95% CI
-[−0.0105, +0.0048], p = 0.427. The interval contains zero. Meanwhile diversity
-rises 0.2125 → 0.2331 and coverage 0.4698 → 0.4875. Two dimensions are free.
+[−0.0105, +0.0048], p = 0.427 (Holm-adjusted 0.855). The interval contains zero.
+Meanwhile diversity rises 0.2125 → 0.2331 and coverage 0.4698 → 0.4875. Two
+dimensions are free.
 
-*Below that, reduction is significantly worse.* Every k ≤ 5 comparison is
-significant at p < 0.01, and accuracy falls monotonically with k. The original
-project's hardcoded k=5 sits on the wrong side of that line.
+*Below that, reduction is significantly worse.* Every k ≤ 5 comparison survives
+Holm correction at p_adj < 0.05, and accuracy falls monotonically with k. The
+original project's hardcoded k=5 sits on the wrong side of that line.
 
 So dimensionality reduction here is a **diversity technique, not an accuracy
 technique**. Every latent model still beats random and popularity by a wide
@@ -286,7 +298,7 @@ src/eigengrooves/
 ├── matching.py          # Levenshtein, token-set, title normalisation
 ├── console.py           # encoding-safe output
 └── cli.py               # recommend / analyze / evaluate / cluster / fetch-data
-tests/                   # 351 tests
+tests/                   # 361 tests
 notebooks/analysis.ipynb # visual walkthrough, runs without a dataset
 paper/paper.pdf          # the write-up; rebuild with `python paper/build.py`
 ```
@@ -338,7 +350,7 @@ a real desktop.
 ```bash
 pip install -e ".[dev]"
 
-pytest -q                                    # 351 tests
+pytest -q                                    # 361 tests
 pytest -q --cov=eigengrooves --cov-report=term-missing
 ruff check .
 mypy

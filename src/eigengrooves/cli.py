@@ -329,16 +329,19 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
     # The headline comparison: does any latent model actually beat the no-SVD
     # control? A difference in means is not an answer -- the queries are shared,
-    # so the test must be paired.
+    # so the test must be paired. And every model is tested against the same
+    # control, so the tests form one family and must be corrected together:
+    # eight comparisons at an uncorrected 5% produce a spurious "significant"
+    # about a third of the time.
     baseline = next((r for r in results if r.name == "raw_cosine"), None)
     tests = []
     if baseline is not None:
-        tests = [
+        tests = holm_correction([
             paired_bootstrap_test(r, baseline, metric=args.test_metric,
                                   random_state=args.seed)
             for r in results
             if r.name != baseline.name
-        ]
+        ])
 
     if args.json:
         print(json.dumps({
@@ -367,7 +370,11 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                     "difference": t.difference,
                     "ci": [t.ci_low, t.ci_high],
                     "p_value": t.p_value,
+                    "p_value_adj": t.p_value_adj,
+                    "correction": "holm",
+                    "n_comparisons": t.n_comparisons,
                     "significant": t.significant,
+                    "interval_excludes_zero": t.interval_excludes_zero,
                 }
                 for t in tests
             ],

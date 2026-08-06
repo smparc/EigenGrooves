@@ -28,7 +28,7 @@ grouping keys are reported so the bias is at least visible from two angles.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -56,6 +56,7 @@ __all__ = [
     "compare_rankers",
     "evaluate_ranker",
     "format_comparison",
+    "holm_correction",
     "paired_bootstrap_test",
 ]
 
@@ -110,24 +111,101 @@ class ComparisonTest:
     ci_high: float
     p_value: float
     n_queries: int
+    # Populated by `holm_correction` once the whole family of comparisons is
+    # known. Left as None on purpose: one test out of a family has no adjusted
+    # p-value, and defaulting it to the raw one is the error being guarded
+    # against.
+    p_value_adj: float | None = None
+    n_comparisons: int = 1
 
     @property
     def significant(self) -> bool:
-        """True when the confidence interval for the difference excludes zero."""
+        """Significant at 5% *after* correcting across the family of tests.
+
+        A sweep compares seven or eight latent models against one control, all
+        at once. At an uncorrected 5% threshold, a family that size produces a
+        "significant" result roughly one time in three from chance alone — and
+        the whole point of this harness is that the SVD's value is a hypothesis
+        being tested rather than a premise being illustrated.
+
+        Returns False when the correction has not been applied, because an
+        uncorrected result is not yet an answer.
+        """
+        return self.p_value_adj is not None and self.p_value_adj < 0.05
+
+    @property
+    def interval_excludes_zero(self) -> bool:
+        """Whether the *uncorrected* CI for the difference excludes zero.
+
+        Descriptive, and reported alongside the corrected verdict rather than in
+        place of it: the interval is not adjusted for multiplicity, so it can
+        exclude zero for a comparison the family-wise correction rejects.
+        """
         return not (self.ci_low <= 0.0 <= self.ci_high)
 
     def summary(self) -> str:
         # Routed through `glyph` for the same reason everything else is: this
         # string reaches a terminal, and a bare Greek delta kills the process
         # on a cp1252 console.
-        verdict = "significant" if self.significant else "NOT significant"
         direction = ">" if self.difference > 0 else "<"
+        if self.p_value_adj is None:
+            verdict = "uncorrected - not yet an answer"
+            p_text = f"p={self.p_value:.3f}"
+        else:
+            verdict = "significant" if self.significant else "NOT significant"
+            p_text = (
+                f"p={self.p_value:.3f}, p_adj={self.p_value_adj:.3f} "
+                f"(Holm, {self.n_comparisons} comparisons)"
+            )
         return (
             f"{self.name_a} ({self.mean_a:.4f}) {direction} {self.name_b} ({self.mean_b:.4f}) "
             f"on {self.metric}: {glyph('Δ')}={self.difference:+.4f} "
             f"[95% CI {self.ci_low:+.4f}, {self.ci_high:+.4f}], "
-            f"p={self.p_value:.3f} - {verdict}"
+            f"{p_text} - {verdict}"
         )
+
+
+def holm_correction(tests: list[ComparisonTest], alpha: float = 0.05) -> list[ComparisonTest]:
+    """Holm-Bonferroni correction across a family of comparisons.
+
+    Every latent model in a sweep is tested against the same control, so the
+    tests form one family and their p-values must be adjusted together. Holm
+    rather than plain Bonferroni: it is uniformly more powerful and equally
+    valid without any independence assumption, which matters here because the
+    systems being compared are nested (``svd_k3`` is a truncation of ``svd_k7``)
+    and their errors are strongly correlated.
+
+    Holm rather than Benjamini-Hochberg — which the sibling Augury project uses
+    — because the questions differ. Augury screens dozens of markets and wants
+    to bound the *proportion* of its discoveries that are false. Here there are
+    a handful of tests and the claim is about each individual model, so
+    controlling the family-wise error rate is the right guarantee.
+
+    Returns copies with ``p_value_adj`` populated, which is what makes
+    :attr:`ComparisonTest.significant` meaningful. Call this once over every
+    comparison in a run; correcting within a subset defeats the purpose.
+    """
+    if not tests:
+        return []
+    if not 0.0 < alpha < 1.0:
+        raise ValueError(f"alpha must be in (0, 1), got {alpha}")
+
+    m = len(tests)
+    order = sorted(range(m), key=lambda i: tests[i].p_value)
+
+    adjusted = [0.0] * m
+    running = 0.0
+    for rank, index in enumerate(order):
+        # Step-down: each adjusted value is monotonically non-decreasing in
+        # rank, so a test can never be rejected while a smaller p-value is not.
+        candidate = (m - rank) * tests[index].p_value
+        running = max(running, candidate)
+        adjusted[index] = min(1.0, running)
+
+    return [
+        replace(test, p_value_adj=adjusted[i], n_comparisons=m)
+        for i, test in enumerate(tests)
+    ]
 
 
 def bootstrap_ci(
